@@ -3,7 +3,7 @@
 #define JSON_WRAPPER_H
 
 #include <glog/logging.h>
-#include <json.h>
+#include <json/json.h>
 #undef TRUE   // json.h pollution
 #undef FALSE  // json.h pollution
 

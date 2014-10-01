@@ -46,6 +46,9 @@
 //   void RandomForTest();
 // };
 
+namespace Akamai {
+      class CertTables;
+}
 
 // NOTE: This is a database interface for the log server.
 // Monitors/auditors shouldn't assume that log entries are keyed
@@ -56,6 +59,8 @@ class Database {
  public:
   enum WriteResult {
     OK,
+    //Failed to add entry to DataBattery
+    DATABATTERY_FAILURE,
     // Create failed, certificate hash is primary key and must exist.
     MISSING_CERTIFICATE_HASH,
     // Create failed, an entry with this hash already exists.
@@ -138,6 +143,7 @@ class Database {
   }
   virtual WriteResult WriteTreeHead_(const ct::SignedTreeHead& sth) = 0;
 
+  virtual int update_from_data_battery(uint tree_size) { return -1; }
   // Return the tree head with the freshest timestamp.
   virtual LookupResult LatestTreeHead(ct::SignedTreeHead* result) const = 0;
 

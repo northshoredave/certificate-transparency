@@ -5,15 +5,18 @@ default: all
 
 -include local.mk
 
-CXXFLAG = -Wall -Werror -g -O3
+CXXFLAG = -Wall -g -O3
 LINK.o = $(LINK.cc)
 
 INCLUDE = -I .
 LOCAL_LIBS = log/libcert.a log/libdatabase.a log/liblog.a \
              merkletree/libmerkletree.a \
              proto/libproto.a util/libutil.a
-LDLIBS = -lpthread -lgflags -lglog -lssl -lcrypto -lldns -lsqlite3 \
-         -lprotobuf -levent_core -levent_extra -levent_pthreads
+#DWC - Added ldl
+LDLIBS = -lpthread -lgflags -lglog -lsqlite3 -ldl \
+         -lprotobuf -levent_core -levent_extra -levent_pthreads \
+         -levent -lakacrypt -lakakernel -lakamai -lakanet -lakastack \
+         -lrt -lssl -lcrypto  
 
 PLATFORM := $(shell uname -s)
 ifeq ($(PLATFORM), FreeBSD)
@@ -62,8 +65,16 @@ GMOCKLIB = gmock/libgmock.a
 INCLUDE += -I /usr/local/include
 LDLIBS += -L /usr/local/lib
 
+#DWC being compile from akamake, want to include common
+ifneq ($(COMMON),)
+  INCLUDE += -I $(COMMON)/include
+  SYS_LIBS += -L $(COMMON)/lib
+endif
+
+
 CXXFLAGS = $(INCLUDE) $(CXXFLAG) $(LOCAL_CXXFLAGS)
 
+<<<<<<< HEAD
 # These tests will be built and run automatically.
 TESTS = \
 	log/database_test \
@@ -98,7 +109,7 @@ EXTRA_TESTS = \
 	log/frontend_test
 
 all: client/ct server/ct-server server/ct-dns-server tools/dump_cert \
-     tools/dump_sth
+     tools/dump_sth server/ct_db_tool
 
 tests: all $(TESTS) $(DISABLED_TESTS) $(EXTRA_TESTS)
 
@@ -107,7 +118,7 @@ tests: all $(TESTS) $(DISABLED_TESTS) $(EXTRA_TESTS)
 .PHONY: clean all test tests alltests benchmark clean
 
 gmock/Makefile: $(GMOCKDIR)
-	mkdir -p gmock && cd gmock && cmake $(GMOCKDIR)
+	mkdir -p gmock && cd gmock && $(COMMON)/bin/cmake $(GMOCKDIR)
 
 gmock/libgmock.a: gmock/Makefile
 	$(MAKE) -C gmock CPPFLAGS="$(CPPFLAGS)" CXXFLAGS="$(CXXFLAGS)" \
@@ -121,7 +132,8 @@ gmock/gtest/libgtest.a: gmock/libgmock.a
 
 ### proto preprocessing
 proto/%.pb.h proto/%.pb.cc: ../proto/%.proto
-	protoc -I .. $^ --cpp_out=.
+	$(COMMON)/bin/protoc -I .. $^ --cpp_out=.
+#protoc -I .. $^ --cpp_out=.
 
 ifneq ($(MAKECMDGOALS),clean)
     include client/.depend
@@ -135,7 +147,7 @@ endif
 
 ### util/ targets
 util/libutil.a: util/util.o util/openssl_util.o util/testing.o \
-                util/json_wrapper.o util/thread_pool.o util/libevent_wrapper.o
+                util/json_wrapper.o util/thread_pool.o util/libevent_wrapper.o util/openssl_thread_locks.o
 	rm -f $@
 	ar -rcs $@ $^
 
@@ -182,13 +194,13 @@ log/libcert.a: log/cert.o log/cert_checker.o log/cert_submission_handler.o \
 	ar -rcs $@ $^
 
 log/libdatabase.a: log/file_storage.o log/filesystem_op.o log/file_db_cert.o \
-                   log/sqlite_db_cert.o
+                   log/sqlite_db_cert.o log/databattery_db_cert.o
 	rm -f $@
 	ar -rcs $@ $^
 
 log/liblog.a: log/log_signer.o log/signer.o log/verifier.o log/frontend.o \
               log/frontend_signer.o log/log_verifier.o log/tree_signer_cert.o \
-              log/log_lookup_cert.o
+              log/log_lookup_cert.o log/data_battery.o log/akamai-query.o
 	rm -f $@
 	ar -rcs $@ $^
 
@@ -268,6 +280,10 @@ log/logged_certificate_test: log/logged_certificate_test.o proto/libproto.a \
                              util/libutil.a merkletree/libmerkletree.a \
                              $(GTESTLIB)
 
+log/data_battery_test: log/data_battery_test.o log/test_signer.o log/libdatabase.a log/libcert.a \
+                       proto/libproto.a util/libutil.a merkletree/libmerkletree.a \
+                       $(GTESTLIB)
+
 monitor/database_test: monitor/database_test.o monitor/database.o \
                        monitor/sqlite_db.o util/libutil.a log/test_signer.o \
                        merkletree/libmerkletree.a log/log_signer.o \
@@ -285,6 +301,8 @@ server/ct-server: server/ct-server.o util/read_private_key.o \
 	server/handler.o $(LOCAL_LIBS)
 
 tools/dump_cert: tools/dump_cert.o proto/libproto.a util/libutil.a
+
+server/ct_db_tool: server/ct_db_tool.o $(LOCAL_LIBS)
 
 tools/dump_sth: tools/dump_sth.o proto/libproto.a
 

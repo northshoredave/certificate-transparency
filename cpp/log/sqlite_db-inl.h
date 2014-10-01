@@ -243,4 +243,16 @@ typename Database<Logged>::LookupResult SQLiteDB<Logged>::LatestTreeHead(
   return this->LOOKUP_OK;
 }
 
+template <class Logged> void SQLiteDB<Logged>::ClearTables() {
+  CHECK_EQ(SQLITE_OK, sqlite3_exec(db_, "DROP TABLE leaves",NULL,NULL,NULL));
+  CHECK_EQ(SQLITE_OK, sqlite3_exec(db_, "DROP TABLE trees",NULL,NULL,NULL));
+  CHECK_EQ(SQLITE_OK, sqlite3_exec(db_, "CREATE TABLE leaves(hash BLOB UNIQUE, "
+        "entry BLOB, sequence INTEGER UNIQUE)",
+        NULL, NULL, NULL));
+  CHECK_EQ(SQLITE_OK, sqlite3_exec(db_, "CREATE TABLE trees(sth BLOB UNIQUE, "
+        "timestamp INTEGER UNIQUE)",
+        NULL, NULL, NULL));
+}
+
+
 #endif  // CERT_TRANS_LOG_SQLITE_DB_INL_H_

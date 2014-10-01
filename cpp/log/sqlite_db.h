@@ -49,6 +49,8 @@ class SQLiteDB : public Database<Logged> {
 
   virtual LookupResult LatestTreeHead(ct::SignedTreeHead* result) const;
 
+  virtual void ClearTables();
+
  private:
   sqlite3* db_;
 

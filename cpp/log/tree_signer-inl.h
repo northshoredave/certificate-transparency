@@ -8,8 +8,10 @@
 #include <set>
 #include <stdint.h>
 
+#include "log/data_battery.h"
 #include "log/database.h"
 #include "log/log_signer.h"
+#include "log/logged_certificate.h"
 #include "merkletree/compact_merkle_tree.h"
 #include "proto/serializer.h"
 #include "util/util.h"
@@ -33,8 +35,8 @@ uint64_t TreeSigner<Logged>::LastUpdateTime() const {
 // DB_ERROR: the database is inconsistent with our inner self.
 // However, if the database itself is giving inconsistent answers, or failing
 // reads/writes, then we die.
-template <class Logged>
-typename TreeSigner<Logged>::UpdateResult TreeSigner<Logged>::UpdateTree() {
+template <class Logged> typename TreeSigner<Logged>::UpdateResult
+TreeSigner<Logged>::UpdateTree(bool run_akamai) {
   // Check that the latest sth is ours.
   ct::SignedTreeHead sth;
   typename Database<Logged>::LookupResult db_result =
@@ -48,40 +50,60 @@ typename TreeSigner<Logged>::UpdateResult TreeSigner<Logged>::UpdateTree() {
     }
   } else {
     CHECK_EQ(db_result, Database<Logged>::LOOKUP_OK)
-        << "Latest STH lookup failed";
+      << "Latest STH lookup failed";
     if (sth.timestamp() != latest_tree_head_.timestamp() ||
         sth.tree_size() != latest_tree_head_.tree_size() ||
         sth.sha256_root_hash() != latest_tree_head_.sha256_root_hash()) {
       LOG(ERROR) << "Database has an STH that does not match ours. "
-                 << "Our STH:\n" << latest_tree_head_.DebugString()
-                 << "Database STH:\n" << sth.DebugString();
+        << "Our STH:\n" << latest_tree_head_.DebugString()
+        << "Database STH:\n" << sth.DebugString();
       return DB_ERROR;
     }
   }
 
   // Timestamps have to be unique.
-  uint64_t min_timestamp = LastUpdateTime() + 1;
+  uint64_t min_timestamp(0);
+  if (run_akamai) {
+    //Now update the local database from the DataBattery leaves. Since they are in order of sequence ID, 
+    //  you can begin your scan from the tree_size.
+    int max_seq_id = db_->update_from_data_battery(sth.tree_size());
 
-  std::set<std::string> pending_hashes = db_->PendingHashes();
-  std::set<std::string>::const_iterator it;
-  for (it = pending_hashes.begin(); it != pending_hashes.end(); ++it) {
-    Logged logged;
-    CHECK_EQ(Database<Logged>::LOOKUP_OK, db_->LookupByHash(*it, &logged))
-        << "Failed to look up pending entry with hash "
-        << util::HexString(*it);
+    min_timestamp = LastUpdateTime() + 1;
+    //Now update your merkle tree 
+    LOG(INFO) << "sth.tree_size " << sth.tree_size() << " max_seq_id " << max_seq_id;
+    for (int i = sth.tree_size(); i <= max_seq_id; ++i) {
+      Logged logged;
+      CHECK_EQ(Database<Logged>::LOOKUP_OK, db_->LookupByIndex(i,&logged))
+        << "Failed to look up pending entry with seq id " << i;
+      std::string serialized_leaf;
+      CHECK(logged.SerializeForLeaf(&serialized_leaf));
+      cert_tree_.AddLeaf(serialized_leaf);
+      if (logged.timestamp() > min_timestamp) { min_timestamp = logged.timestamp(); }
+    }
+  } else {
+    min_timestamp = LastUpdateTime() + 1;
 
-    CHECK(!logged.has_sequence_number())
+    std::set<std::string> pending_hashes = db_->PendingHashes();
+    std::set<std::string>::const_iterator it;
+    for (it = pending_hashes.begin(); it != pending_hashes.end(); ++it) {
+      Logged logged;
+      CHECK_EQ(Database<Logged>::LOOKUP_OK, db_->LookupByHash(*it, &logged))
+          << "Failed to look up pending entry with hash "
+          << util::HexString(*it);
+
+      CHECK(!logged.has_sequence_number())
         << "Pending entry already has a sequence number; entry is "
         << logged.DebugString();
 
-    CHECK_EQ(logged.Hash(), *it);
-    if (!Append(logged)) {
-      LOG(ERROR) << "Assigning sequence number failed";
-      return DB_ERROR;
-    }
+      CHECK_EQ(logged.Hash(), *it);
+      if (!Append(logged)) {
+        LOG(ERROR) << "Assigning sequence number failed";
+        return DB_ERROR;
+      }
 
-    if (logged.timestamp() > min_timestamp)
-      min_timestamp = logged.timestamp();
+      if (logged.timestamp() > min_timestamp)
+        min_timestamp = logged.timestamp();
+    }
   }
 
   // Our tree is consistent with the database, i.e., each leaf in the tree has

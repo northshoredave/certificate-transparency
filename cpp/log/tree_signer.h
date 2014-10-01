@@ -34,7 +34,7 @@ class TreeSigner {
   // Simplest update mechanism: take all pending entries and append
   // (in random order) to the tree. Checks that the update it writes
   // to the database is consistent with the latest STH.
-  UpdateResult UpdateTree();
+  UpdateResult UpdateTree(bool run_akamai = false);
 
   // Latest Tree Head (does not build a new tree, just retrieves the
   // result of the most recent build).

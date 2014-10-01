@@ -1,6 +1,6 @@
 # A simple top-level Makefile acting as a shortcut for the various languages
 # build and test commands.
-all: cpp java python
+all: cpp
 
 .DELETE_ON_ERROR:
 
@@ -22,7 +22,7 @@ cpp:
 
 # TODO(pphaneuf): The dependency on python is a bit excessive, but necessary
 # for now.
-cpp_test: cpp python
+cpp_test: cpp
 	@$(MAKE) -C cpp test
 
 cpp_clean:

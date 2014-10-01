@@ -27,7 +27,7 @@ class HttpHandler {
               const CertChecker* cert_checker, Frontend* frontend,
               ThreadPool* pool);
 
-  void Add(libevent::HttpServer* server);
+  void Add(libevent::HttpServer* server, bool allow_audit, bool allow_subm);
 
  private:
   void GetEntries(evhttp_request* req) const;

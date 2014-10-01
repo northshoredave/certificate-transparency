@@ -21,6 +21,7 @@
 #include "log/logged_certificate.h"
 #include "util/json_wrapper.h"
 #include "util/thread_pool.h"
+#include "log/akamai-query.h"
 
 using boost::bind;
 using boost::make_shared;
@@ -218,22 +219,25 @@ HttpHandler::HttpHandler(LogLookup<LoggedCertificate>* log_lookup,
 }
 
 
-void HttpHandler::Add(libevent::HttpServer* server) {
+void HttpHandler::Add(libevent::HttpServer* server, bool allow_audit,
+                      bool allow_subm) {
   // TODO(pphaneuf): An optional prefix might be nice?
   // TODO(pphaneuf): Find out which methods are CPU intensive enough
   // that they should be spun off to the thread pool.
-  CHECK(server->AddHandler("/ct/v1/get-entries",
-                           bind(&HttpHandler::GetEntries, this, _1)));
-  CHECK(server->AddHandler("/ct/v1/get-roots",
-                           bind(&HttpHandler::GetRoots, this, _1)));
-  CHECK(server->AddHandler("/ct/v1/get-proof-by-hash",
-                           bind(&HttpHandler::GetProof, this, _1)));
-  CHECK(server->AddHandler("/ct/v1/get-sth",
-                           bind(&HttpHandler::GetSTH, this, _1)));
-  CHECK(server->AddHandler("/ct/v1/get-sth-consistency",
-                           bind(&HttpHandler::GetConsistency, this, _1)));
+  if (allow_audit) {
+    CHECK(server->AddHandler("/ct/v1/get-entries",
+                             bind(&HttpHandler::GetEntries, this, _1)));
+    CHECK(server->AddHandler("/ct/v1/get-roots",
+                             bind(&HttpHandler::GetRoots, this, _1)));
+    CHECK(server->AddHandler("/ct/v1/get-proof-by-hash",
+                             bind(&HttpHandler::GetProof, this, _1)));
+    CHECK(server->AddHandler("/ct/v1/get-sth",
+                             bind(&HttpHandler::GetSTH, this, _1)));
+    CHECK(server->AddHandler("/ct/v1/get-sth-consistency",
+                             bind(&HttpHandler::GetConsistency, this, _1)));
+  }
 
-  if (frontend_) {
+  if (allow_subm && frontend_) {
     CHECK(server->AddHandler("/ct/v1/add-chain",
                              bind(&HttpHandler::AddChain, this, _1)));
     CHECK(server->AddHandler("/ct/v1/add-pre-chain",
@@ -245,6 +249,7 @@ void HttpHandler::Add(libevent::HttpServer* server) {
 void HttpHandler::GetEntries(evhttp_request* req) const {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_GET)
     return SendError(req, HTTP_BADMETHOD, "Method not allowed.");
+  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETENTRIES);
 
   const multimap<string, string> query(ParseQuery(req));
 
@@ -279,6 +284,7 @@ void HttpHandler::GetRoots(evhttp_request* req) const {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_GET) {
     SendError(req, HTTP_BADMETHOD, "Method not allowed.");
   }
+  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETROOTS);
 
   JsonArray roots;
   multimap<string, const Cert*>::const_iterator it;
@@ -303,6 +309,7 @@ void HttpHandler::GetRoots(evhttp_request* req) const {
 void HttpHandler::GetProof(evhttp_request* req) const {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_GET)
     SendError(req, HTTP_BADMETHOD, "Method not allowed.");
+  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETPRBYHS);
 
   const multimap<string, string> query(ParseQuery(req));
 
@@ -346,6 +353,7 @@ void HttpHandler::GetProof(evhttp_request* req) const {
 void HttpHandler::GetSTH(evhttp_request* req) const {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_GET)
     SendError(req, HTTP_BADMETHOD, "Method not allowed.");
+  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETSTH);
 
   const SignedTreeHead& sth(log_lookup_->GetSTH());
 
@@ -367,6 +375,7 @@ void HttpHandler::GetConsistency(evhttp_request* req) const {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_GET) {
     SendError(req, HTTP_BADMETHOD, "Method not allowed.");
   }
+  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETSTHCNS);
 
   const multimap<string, string> query(ParseQuery(req));
 
@@ -399,6 +408,7 @@ void HttpHandler::GetConsistency(evhttp_request* req) const {
 
 void HttpHandler::AddChain(evhttp_request* req) {
   const shared_ptr<CertChain> chain(make_shared<CertChain>());
+  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::ADDCHAIN);
   if (!ExtractChain(req, chain.get())) {
     return;
   }
@@ -409,6 +419,7 @@ void HttpHandler::AddChain(evhttp_request* req) {
 
 void HttpHandler::AddPreChain(evhttp_request* req) {
   const shared_ptr<PreCertChain> chain(make_shared<PreCertChain>());
+  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::ADDPRECHAIN);
   if (!ExtractChain(req, chain.get())) {
     return;
   }

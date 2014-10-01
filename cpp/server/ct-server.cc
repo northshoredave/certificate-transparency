@@ -19,11 +19,15 @@
 #include "log/log_lookup.h"
 #include "log/log_signer.h"
 #include "log/sqlite_db.h"
+#include "log/databattery_db.h"
 #include "log/tree_signer.h"
 #include "server/handler.h"
 #include "util/libevent_wrapper.h"
 #include "util/read_private_key.h"
 #include "util/thread_pool.h"
+#include "log/data_battery.h"
+#include "log/akamai-query.h"
+#include "util/openssl_thread_locks.h"
 
 DEFINE_string(server, "localhost", "Server host");
 DEFINE_int32(port, 9999, "Server port");
@@ -51,6 +55,23 @@ DEFINE_int32(tree_signing_frequency_seconds, 600,
              "server select loop, at least this period has elapsed since the "
              "last signing. Set this well below the MMD to ensure we sign in "
              "a timely manner. Must be greater than 0.");
+DEFINE_bool(akamai_run,false,"Whether we should do akamai or not");
+DEFINE_bool(akamai_get_roots_from_db,false,"Whether we should attempt to get ca roots from DB");
+DEFINE_string(akamai_db_app,"ct",
+             "App name used by databattery for CT");
+DEFINE_string(akamai_db_hostname,"", "Hostname of DataBattery");
+DEFINE_string(akamai_db_serv,"443",
+              "Port or service for DataBattery");
+DEFINE_string(akamai_db_cert,"", "Cert to use when accessing DataBattery");
+DEFINE_string(akamai_db_key,"", "Key to use when accessing DataBattery");
+DEFINE_string(akamai_db_request_bytes,"request_bytes","name of limit to get max entry value size");
+DEFINE_string(akamai_db_config_table,"pending","What table to get config from.");
+DEFINE_string(akamai_db_config_key,"config","What key to retrieve from config_table");
+DEFINE_string(akamai_tableprov_dir,"query","What directory to write query tables in to get picked up by tabelprov");
+DEFINE_bool(akamai_allow_cert_sub,true,"Whether to allow cert submission (is this a query only ct?)");
+DEFINE_bool(akamai_allow_audit,true,"Whether to allow audit,proof queries?");
+DEFINE_int32(akamai_sleep,5,"How long to sleep when key is missing before trying again");
+
 
 namespace libevent = cert_trans::libevent;
 
@@ -66,6 +87,168 @@ using cert_trans::ThreadPool;
 using cert_trans::util::ReadPrivateKey;
 using google::RegisterFlagValidator;
 using std::string;
+
+namespace Akamai {
+  class main_setup {
+    public:
+      main_setup() 
+        : _cert_tables(NULL)
+          , _commit_cert_tables(NULL)
+          , _hbtd(NULL)
+          , _ltd(NULL)
+          , _ctd(NULL)
+          , _cnfgtd(NULL)
+      {}
+
+      void init() 
+      {
+        _id = Peers::randByteString(16);
+        LOG(INFO) << "New id " << _id;
+        //Setup query
+        query_interface::init(FLAGS_akamai_tableprov_dir,_id);
+        query_interface::instance()->get_main_data()->_start_time = util::TimeInMilliseconds();
+
+        //thread safety for openssl
+        thread_setup();
+        
+        //First DB instance
+        DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
+            FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key, FLAGS_akamai_sleep);
+        DataBattery* cnfg_db = new DataBattery(db_settings);
+        CHECK(cnfg_db->isGood()) << "Failed to create DataBattery instance for cnfg_db";
+        //Need to query databattery to get max size of a value in DB table and to get config, so use cnfg_db before
+        // giving it away
+        string value;
+        CHECK(cnfg_db->GETLIMIT(FLAGS_akamai_db_request_bytes,value)) << "Failed to get max value size from DB";
+        uint64_t db_max_entry_size = atoi(value.c_str());
+        if (_cnfgd.db_max_entry_size() != 0) {
+          _cnfgd.set_db_max_entry_size(std::min(_cnfgd.db_max_entry_size(),db_max_entry_size));
+        } else {
+          _cnfgd.set_db_max_entry_size(db_max_entry_size);
+        }
+        LOG(INFO) << "Set db_max_entry_size " << _cnfgd.db_max_entry_size();
+
+        //Now get the config
+        _cnfgtd = new config_thread_data(cnfg_db,FLAGS_akamai_db_config_table,FLAGS_akamai_db_config_key,
+            &_cnfgd);
+        CHECK(create_config_thread(_cnfgtd));
+
+        //Init some query stuff now that you have config
+        LOG(INFO) << "Set bucket_sets " << _cnfgd.bucket_sets().size() << " bucket_time " << _cnfgd.bucket_time();
+        query_interface::instance()->req_count_init(_id,_cnfgd.bucket_sets(),
+            _cnfgd.bucket_time());
+
+        //DataBattery is owned and deleted by the object it's given to in all cases
+        DataBattery* ct_db = new DataBattery(db_settings);
+        CHECK(ct_db->isGood()) << "Failed to create DataBattery instance for ct_db";
+        _cert_tables = new CertTables(ct_db,_id,&_pd,&_ld,&_hbd,&_cnfgd);
+        //Don't create a pending index if you don't allow submissions
+        if (FLAGS_akamai_allow_cert_sub) { _cert_tables->init_pending_data(&_pd); }
+
+        //Create heartbeat thread if you allow submissions
+        if (FLAGS_akamai_allow_cert_sub) {
+          DataBattery* hd_db = new DataBattery(db_settings);
+          CHECK(hd_db->isGood()) << "Failed to create DataBattery instance for hd_db";
+          _hbtd = new heartbeat_thread_data(hd_db,_id,&_hbd,&_cnfgd);
+          CHECK(create_heartbeat_thread(_hbtd));
+        }
+        //End of hearbeat thread
+        
+        //Create leaves thread data but don't start until after SQLiteDB created
+        DataBattery* ld_db = new DataBattery(db_settings);
+        CHECK(ld_db->isGood()) << "Failed to create DataBattery instance for ld_db";
+        _ltd = new leaves_thread_data(ld_db,&_ld,&_cnfgd);  
+        CHECK(create_leaves_thread(_ltd));
+        //End of leaves thread
+        
+        //Create commit thread if you allow submissions
+        if (FLAGS_akamai_allow_cert_sub) {
+          DataBattery* cct_db = new DataBattery(db_settings);
+          CHECK(cct_db->isGood()) << "Failed to create DataBattery instance for cct_db";
+          _commit_cert_tables = new CertTables(cct_db,_id,&_pd,&_ld,&_hbd,&_cnfgd);
+          _ctd = new commit_thread_data(_commit_cert_tables,&_cnfgd);
+          CHECK(create_commit_thread(_ctd));
+        }
+      }
+
+      void get_roots() {
+        LOG(INFO) << "Get roots";
+        DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
+            FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,FLAGS_akamai_sleep);
+        DataBattery db(db_settings);
+        CHECK(db.isGood()) << "Failed to create DataBattery instance for db";
+        string data;
+        CHECK(db.GET_key_from_table(_cnfgd.db_root_table(),_cnfgd.db_root_key(),_cnfgd.db_max_entry_size(),
+              data)) << "Failed to retrieve roots from DB";
+        ct::X509Root roots; 
+        CHECK(roots.ParseFromString(data)) << "Failed to parse roots from DB";
+        std::ofstream ofs(FLAGS_trusted_cert_file.c_str());
+        for (int i = 0; i < roots.roots_size(); ++i) {
+          ct::Cert* new_root = new ct::Cert;
+          new_root->LoadFromDerString(roots.roots(i));
+          string pem_enc;
+          new_root->PemEncoding(&pem_enc);
+          ofs << pem_enc;
+        }
+        ofs.close();
+      }
+
+      ~main_setup() {
+        thread_cleanup();
+        if (_cert_tables) { delete _cert_tables; }
+        if (_commit_cert_tables) { delete _commit_cert_tables; }
+        if (_hbtd) { delete _hbtd; }
+        if (_ltd) { delete _ltd; }
+        if (_ctd) { delete _ctd; }
+        if (_cnfgtd) { delete _cnfgtd; }
+      }
+
+      CertTables* get_cert_tables() { return _cert_tables; }
+      const ConfigData& get_config() const { return _cnfgd; } 
+      void get_stats(ct_stats_data_def* t) {
+        t->_tree_size = _ld.get_leaves_count();
+        t->_leaves_time = _ld.get_timestamp();
+        t->_peers_time = _hbd.get_timestamp();
+        if (_ctd) { t->_commit_time = _ctd->get_timestamp(); }
+        t->_config_time = _cnfgd.get_timestamp();
+      }
+      void get_cert_info(ct_cert_info_data_def* d) {
+        //Shared data struct, must lock
+        _ld.lock();
+        const ct::LoggedCertificatePBList& leaves = _ld.get_leaves();
+        d->_info.clear();
+        d->_info.resize(leaves.logged_certificate_pbs_size());
+        for (int i = 0; i < leaves.logged_certificate_pbs_size(); ++i) {
+          const ct::LoggedCertificatePB& lcpb = leaves.logged_certificate_pbs(i);
+          ct::Cert tmp;
+          if (lcpb.contents().entry().type() == 0) { 
+            tmp.LoadFromDerString(lcpb.contents().entry().x509_entry().leaf_certificate());
+          } else {
+            tmp.LoadFromDerString(lcpb.contents().entry().precert_entry().pre_certificate());
+          }
+          d->_info[i]._cert_type = (lcpb.contents().entry().type() == 0) ? "x509":"pre-cert";
+          d->_info[i]._subject = tmp.PrintSubjectName();
+          d->_info[i]._issuer = tmp.PrintIssuerName();
+          d->_info[i]._not_before = tmp.PrintNotBefore();
+          d->_info[i]._not_after = tmp.PrintNotAfter();
+        }
+        //Make sure to unlock shared data struct
+        _ld.unlock();
+      }
+    private:
+      ConfigData _cnfgd;
+      PendingData _pd;
+      LeavesData _ld;
+      HeartBeatData _hbd;
+      CertTables* _cert_tables;
+      CertTables* _commit_cert_tables;
+      heartbeat_thread_data* _hbtd;
+      leaves_thread_data* _ltd;
+      commit_thread_data* _ctd;
+      config_thread_data* _cnfgtd;
+      string _id;
+  };
+}
 
 static const int kCtimeBufSize = 26;
 
@@ -88,8 +271,6 @@ static bool ValidateRead(const char* flagname, const string& path) {
   }
   return true;
 }
-
-static const bool key_dummy = RegisterFlagValidator(&FLAGS_key, &ValidateRead);
 
 static const bool cert_dummy =
     RegisterFlagValidator(&FLAGS_trusted_cert_file, &ValidateRead);
@@ -166,15 +347,31 @@ class PeriodicCallback {
   DISALLOW_COPY_AND_ASSIGN(PeriodicCallback);
 };
 
-void SignMerkleTree(TreeSigner<LoggedCertificate>* tree_signer,
-                    LogLookup<LoggedCertificate>* log_lookup) {
-  CHECK_EQ(tree_signer->UpdateTree(), TreeSigner<LoggedCertificate>::OK);
+void SignMerkleTree(TreeSigner<LoggedCertificate> *tree_signer,
+                    LogLookup<LoggedCertificate> *log_lookup,
+                    bool akamai_run) {
+  CHECK_EQ(tree_signer->UpdateTree(akamai_run),
+           TreeSigner<LoggedCertificate>::OK);
   CHECK_EQ(log_lookup->Update(), LogLookup<LoggedCertificate>::UPDATE_OK);
 
   const time_t last_update(
       static_cast<time_t>(tree_signer->LastUpdateTime() / 1000));
   char buf[kCtimeBufSize];
   LOG(INFO) << "Tree successfully updated at " << ctime_r(&last_update, buf);
+}
+
+void AkamaiQueryEvent(Akamai::main_setup* main_data,
+                      LogLookup<LoggedCertificate> *log_lookup) {
+  LOG(INFO) << "Query event";
+  const ct::SignedTreeHead &sth = log_lookup->GetSTH();
+  Akamai::query_interface::instance()->get_main_data()->_root_hash =
+    util::ToBase64(sth.sha256_root_hash());
+  main_data->get_stats(Akamai::query_interface::instance()->get_stats_data());
+  if (main_data->get_config().publish_cert_info()) {
+    main_data->get_cert_info(Akamai::query_interface::instance()->get_cert_info_data());
+  }
+  LOG(INFO) << "Query success";
+  CHECK(Akamai::query_interface::instance()->update_tables());
 }
 
 int main(int argc, char* argv[]) {
@@ -184,10 +381,22 @@ int main(int argc, char* argv[]) {
   ERR_load_crypto_strings();
   cert_trans::LoadCtExtensions();
 
-  EVP_PKEY* pkey = NULL;
-  CHECK_EQ(ReadPrivateKey(&pkey, FLAGS_key), cert_trans::util::KEY_OK);
+  EVP_PKEY *pkey = NULL;
+  while (ReadPrivateKey(&pkey, FLAGS_key) != cert_trans::util::KEY_OK) {
+    LOG(INFO) << "Have not received private key yet sleep";
+    sleep(FLAGS_akamai_sleep);
+  }
   LogSigner log_signer(pkey);
 
+  Akamai::main_setup* akamai(NULL);
+  if (FLAGS_akamai_run) { 
+    akamai = new Akamai::main_setup(); 
+    akamai->init();
+  }
+  if (FLAGS_akamai_run&&FLAGS_akamai_get_roots_from_db) {
+    //Load roots from DB and write to the file read below.  Avoids changing any CT code in cert_checker.
+    akamai->get_roots();
+  } 
   CertChecker checker;
   CHECK(checker.LoadTrustedCertificates(FLAGS_trusted_cert_file))
       << "Could not load CA certs from " << FLAGS_trusted_cert_file;
@@ -205,12 +414,19 @@ int main(int argc, char* argv[]) {
 
   Database<LoggedCertificate>* db;
 
-  if (FLAGS_sqlite_db != "")
-    db = new SQLiteDB<LoggedCertificate>(FLAGS_sqlite_db);
-  else
-    db = new FileDB<LoggedCertificate>(
-        new FileStorage(FLAGS_cert_dir, FLAGS_cert_storage_depth),
-        new FileStorage(FLAGS_tree_dir, FLAGS_tree_storage_depth));
+  if (FLAGS_sqlite_db != "") {
+    if (FLAGS_akamai_run) {
+      db = new Akamai::DataBatteryDB<LoggedCertificate,
+                                     ct::LoggedCertificatePBList>(
+          FLAGS_sqlite_db, akamai->get_cert_tables());
+    } else {
+      db = new SQLiteDB<LoggedCertificate>(FLAGS_sqlite_db);
+    }
+  } else {
+      db = new FileDB<LoggedCertificate>(
+               new FileStorage(FLAGS_cert_dir, FLAGS_cert_storage_depth),
+               new FileStorage(FLAGS_tree_dir, FLAGS_tree_storage_depth));
+  }
 
   evthread_use_pthreads();
   const shared_ptr<libevent::Base> event_base(make_shared<libevent::Base>());
@@ -222,7 +438,7 @@ int main(int argc, char* argv[]) {
 
   // This function is called "sign", but it also loads the LogLookup
   // object from the database as a side-effect.
-  SignMerkleTree(&tree_signer, &log_lookup);
+  SignMerkleTree(&tree_signer, &log_lookup,FLAGS_akamai_run);
 
   const time_t last_update(
       static_cast<time_t>(tree_signer.LastUpdateTime() / 1000));
@@ -236,15 +452,26 @@ int main(int argc, char* argv[]) {
 
   PeriodicCallback tree_event(event_base, FLAGS_tree_signing_frequency_seconds,
                               boost::bind(&SignMerkleTree, &tree_signer,
-                                          &log_lookup));
+                                          &log_lookup, FLAGS_akamai_run));
+
+  LOG(INFO) << "Create akamai query event";
+  PeriodicCallback akamai_query_event(
+      event_base, akamai->get_config().query_freq(),
+      boost::bind(&AkamaiQueryEvent,akamai,&log_lookup));
+  LOG(INFO) << "Created akamai query event";
 
   libevent::HttpServer server(*event_base);
-  handler.Add(&server);
+  if (FLAGS_akamai_run) {
+    handler.Add(&server,FLAGS_akamai_allow_audit,FLAGS_akamai_allow_cert_sub);
+  } else {
+    handler.Add(&server,true,true);
+  }
   server.Bind(NULL, FLAGS_port);
 
   std::cout << "READY" << std::endl;
 
   event_base->Dispatch();
+  if (akamai) { delete akamai; }
 
   return 0;
 }
