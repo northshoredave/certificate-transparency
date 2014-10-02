@@ -1,0 +1,2 @@
+../client/ct audit --ct_server=127.0.0.1 --ct_server_port=80 --ct_server_public_key=tmp3/ct-server-key-public.pem --logtostderr=true --ssl_client_ct_data_in=tmp3/test-intermediate-cert.ctdata --http_log
+curl "http://127.0.0.1/ct/v1/get-proof-by-hash?hash=zzzLx1lPqkrizKY5V9R94W44aXkntH%2B17gpZ%2FhDGk%2BM%3D&tree_size=8"

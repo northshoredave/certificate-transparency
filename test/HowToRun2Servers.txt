@@ -1,0 +1,28 @@
+1) Run the ./httpconnect_test script to get the first server started and generate log keys and CA certs.
+
+./httpconnect_test.sh tmp3 80 YES 2 log
+
+You can reset the DB tables by leaving in the --akamai_clear_db_tables_test_only
+
+Once it is up and running, you can query how it's doing using the usual STH call:
+
+curl "http://127.0.0.1:80/ct/v1/get-sth"
+
+2) Copy the cert_dir given above (tmp3) to a new directory (say tmp4).  Then update everything in tmp4 that refers
+  to tmp3.
+
+  Then you can run the script to just start the server: 
+
+  runserver4000.call:
+
+  ../server/ct-rfc-server --akamai_run --akamai_local_ip=222.222.222.222 -port=4000 --key="/home/dcurrie/clients/dcurrie_ct1/CertificateTransparency/CertificateTransparency-1.0/src/test/tmp4/ct-server-key.pem" --trusted_cert_file=tmp4/ca-cert.pem --log_dir=./log2/ --tree_signing_frequency_seconds=15 --sqlite_db=tmp4/storage/ct&
+
+  Wait until it's up and running.  Then use the STH call and see if the root_hash matches for :80 and :4000.  They should.
+
+3) Now try adding certs to each of them
+  a) Generate a new cert in the appropriate directory by using make_cert.sh
+
+  ./make_cert.sh tmp4 4000 3
+
+
+    
