@@ -8,9 +8,11 @@
 #include "log/logged_certificate.h"
 #include <algorithm>
 #include "log/cert.h"
+#include <google/protobuf/descriptor.h>
 
 using namespace Akamai;
 using namespace std;
+using namespace google::protobuf;
 
 bool DataBattery::_loadlibraries = true;
 int DataBattery::_maxline = 4028;
@@ -1106,4 +1108,50 @@ bool Akamai::create_leaves_thread(leaves_thread_data* ltd) {
     LOG(INFO) << "LT: Created leaves thread";
   }
   return true;
+}
+
+void ConfigData::gen_key_values(vector<pair<string, string> >& kv_pairs) const {
+  kv_pairs.clear();
+  pthread_mutex_lock(&_mutex);
+  int num_fields = _config.GetDescriptor()->field_count();
+  const Reflection* rd = _config.GetReflection();
+  for (int i = 0; i < num_fields; ++i) {
+    const FieldDescriptor* fd = _config.GetDescriptor()->FindFieldByNumber(i);
+    if (fd) {
+      if (fd->is_repeated()) {
+        for (uint k = 0; k < rd->FieldSize(_config,fd); k++) {
+          stringstream value;
+          switch(fd->type()) {
+            case FieldDescriptor::TYPE_UINT32:
+              value << rd->GetRepeatedUInt32(_config,fd,k);
+              break;
+            default:
+              value << "unknown type";
+          }
+          kv_pairs.push_back(pair<string,string>(fd->full_name(),value.str()));
+        }
+      } else {
+        stringstream value;
+        switch(fd->type()) {
+          case FieldDescriptor::TYPE_STRING:
+            value << rd->GetString(_config,fd);
+            break;
+          case FieldDescriptor::TYPE_UINT64:
+            value << rd->GetUInt64(_config,fd);
+            break;
+          case FieldDescriptor::TYPE_UINT32:
+            value << rd->GetUInt32(_config,fd);
+            break;
+          case FieldDescriptor::TYPE_BOOL:
+            if (rd->GetBool(_config,fd)) { value << "true"; }
+            else { value << "false"; }
+            break;
+          default:
+            value << "unknown type";
+        }
+        kv_pairs.push_back(pair<string,string>(fd->full_name(),value.str()));
+      }
+    }
+  }
+  pthread_mutex_unlock(&_mutex);
 }

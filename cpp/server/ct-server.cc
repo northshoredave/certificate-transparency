@@ -106,7 +106,7 @@ namespace Akamai {
         LOG(INFO) << "New id " << _id;
         //Setup query
         query_interface::init(FLAGS_akamai_tableprov_dir,_id);
-        query_interface::instance()->get_main_data()->_start_time = util::TimeInMilliseconds();
+        query_interface::instance()->get_main_data()->_start_time = time(0);
 
         //thread safety for openssl
         thread_setup();
@@ -211,6 +211,9 @@ namespace Akamai {
         t->_peers_time = _hbd.get_timestamp();
         if (_ctd) { t->_commit_time = _ctd->get_timestamp(); }
         t->_config_time = _cnfgd.get_timestamp();
+      }
+      void get_config_data(ct_config_data_def* d) {
+        _cnfgd.gen_key_values(d->_config_key_value);
       }
       void get_cert_info(ct_cert_info_data_def* d) {
         //Shared data struct, must lock
@@ -370,6 +373,7 @@ void AkamaiQueryEvent(Akamai::main_setup* main_data,
   if (main_data->get_config().publish_cert_info()) {
     main_data->get_cert_info(Akamai::query_interface::instance()->get_cert_info_data());
   }
+  main_data->get_config_data(Akamai::query_interface::instance()->get_config_data());
   LOG(INFO) << "Query success";
   CHECK(Akamai::query_interface::instance()->update_tables());
 }

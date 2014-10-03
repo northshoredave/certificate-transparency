@@ -36,6 +36,37 @@ void main_callback(std::ofstream& ofs,const void* user_arg) {
 
 /******* End Main Table *********/
 
+/******* Config Table ***********/
+static q2_column_description ct_config_columns[] = {
+  {"myid",    "ct_instance_id", Q2_STRING, Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
+  {"now",     "current time",  Q2_TIME,   Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
+  {"key",     "config key", Q2_STRING, Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
+  {"value",   "config value", Q2_STRING, Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
+  Q2_END_COLUMN
+};
+
+static struct ct_config_data_def ct_config_data;
+
+void query_interface::update_config(const ct_config_data_def* d) {
+  pthread_mutex_lock(&_mutex);
+  ct_config_data = *d;
+  pthread_mutex_unlock(&_mutex);
+}
+
+void config_callback(std::ofstream& ofs,const void* user_arg) {
+  LOG(INFO) << "Config callback";
+  const ct_config_data_def* args = (const ct_config_data_def *)user_arg;
+  time_t current_time = time(0);
+
+  for (vector<pair<string,string> >::const_iterator kvIt = args->_config_key_value.begin();
+      kvIt != args->_config_key_value.end(); ++kvIt) {
+    ofs << args->_myid << ","
+        << current_time << ","
+        << kvIt->first << ","
+        << kvIt->second << endl;
+  }
+}
+
 /******* Cert Info table ***********/
 static q2_column_description ct_cert_info_columns[] = {
   {"myid",     "ct instance id", Q2_STRING, Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
@@ -171,10 +202,11 @@ struct table_schema {
 };
 
 static struct table_schema tables[] = {
-  { {"ct_main", "Important instance details",ct_main_columns}, &ct_main_data, main_callback },
-  { {"ct_cert_info", "Commited cert info",ct_cert_info_columns}, &ct_cert_info_data, cert_info_callback },
-  { {"ct_stats","General run statistics",ct_stats_columns}, &ct_stats_data, stats_callback },
-  { {"ct_req_count","How many hits each request type get over different time periods", ct_req_count_columns}, &ct_req_count_data, req_count_callback },
+  { {"appbatt_app_ct_main", "Important instance details",ct_main_columns}, &ct_main_data, main_callback },
+  { {"appbatt_app_ct_config", "Config details",ct_config_columns}, &ct_config_data, config_callback },
+  { {"appbatt_app_ct_cert_info", "Commited cert info",ct_cert_info_columns}, &ct_cert_info_data, cert_info_callback },
+  { {"appbatt_app_ct_stats","General run statistics",ct_stats_columns}, &ct_stats_data, stats_callback },
+  { {"appbatt_app_ct_req_count","How many hits each request type get over different time periods", ct_req_count_columns}, &ct_req_count_data, req_count_callback },
   { { 0 } }
 };
 
@@ -183,6 +215,7 @@ void query_interface::update_table_data() {
   update_req_count();
   update_stats(_stats_data);
   update_main(_main_data);
+  update_config(_config_data);
   update_cert_info(_cert_info_data);
 }
 

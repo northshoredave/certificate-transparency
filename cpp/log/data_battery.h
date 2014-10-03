@@ -219,7 +219,7 @@ namespace Akamai {
         pthread_mutex_init(&_mutex,NULL);
       }
       void update_time() {
-        uint64_t current_time = util::TimeInMilliseconds();
+        uint64_t current_time = time(0);
         pthread_mutex_lock(&_mutex);
         _timestamp = current_time;
         pthread_mutex_unlock(&_mutex);
@@ -245,6 +245,7 @@ namespace Akamai {
       {
         pthread_mutex_init(&_mutex,NULL);
       }
+      void gen_key_values(std::vector<std::pair<std::string, std::string> >& kv_pairs) const;
       bool ParseFromString(std::string value) {
         bool ret(false);
         pthread_mutex_lock(&_mutex);

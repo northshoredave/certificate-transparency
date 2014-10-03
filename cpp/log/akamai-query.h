@@ -81,6 +81,14 @@ namespace Akamai {
     std::string _root_hash;
   };
 
+  struct ct_config_data_def {
+    ct_config_data_def()
+      : _myid("")
+    {}
+    std::string _myid;
+    std::vector<std::pair<std::string,std::string> > _config_key_value;
+  };
+
   struct ct_stats_data_def {
     ct_stats_data_def()
       : _myid("")
@@ -118,6 +126,7 @@ namespace Akamai {
   class query_interface {
     public:
       void update_main(const ct_main_data_def* d);
+      void update_config(const ct_config_data_def* d);
       void update_stats(const ct_stats_data_def* d);
       void update_req_count();
       void update_cert_info(const ct_cert_info_data_def* d);
@@ -133,6 +142,7 @@ namespace Akamai {
       }
       void process_hit(RequestStats::request_type r) { _req_counts.process_hit(r); } 
       ct_main_data_def* get_main_data() { return _main_data; }
+      ct_config_data_def* get_config_data() { return _config_data; }
       ct_stats_data_def* get_stats_data() { return _stats_data; }
       ct_cert_info_data_def* get_cert_info_data() { return _cert_info_data; }
 
@@ -147,6 +157,8 @@ namespace Akamai {
         _stats_data->_myid = _myid;
         _main_data = new ct_main_data_def;
         _main_data->_myid = _myid;
+        _config_data = new ct_config_data_def;
+        _config_data->_myid = _myid;
         _cert_info_data = new ct_cert_info_data_def;
         _cert_info_data->_myid = _myid;
       }
@@ -167,6 +179,7 @@ namespace Akamai {
       std::string _tableprov_directory;
       RequestStats _req_counts;
       ct_main_data_def* _main_data;
+      ct_config_data_def* _config_data;
       ct_stats_data_def* _stats_data;
       ct_cert_info_data_def* _cert_info_data;
       mutable pthread_mutex_t _mutex;
