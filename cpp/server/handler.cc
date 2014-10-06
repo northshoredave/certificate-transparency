@@ -249,7 +249,9 @@ void HttpHandler::Add(libevent::HttpServer* server, bool allow_audit,
 void HttpHandler::GetEntries(evhttp_request* req) const {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_GET)
     return SendError(req, HTTP_BADMETHOD, "Method not allowed.");
-  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETENTRIES);
+  if (Akamai::query_interface::instance()) {
+    Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETENTRIES);
+  }
 
   const multimap<string, string> query(ParseQuery(req));
 
@@ -284,7 +286,9 @@ void HttpHandler::GetRoots(evhttp_request* req) const {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_GET) {
     SendError(req, HTTP_BADMETHOD, "Method not allowed.");
   }
-  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETROOTS);
+  if (Akamai::query_interface::instance()) {
+    Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETROOTS);
+  }
 
   JsonArray roots;
   multimap<string, const Cert*>::const_iterator it;
@@ -309,7 +313,9 @@ void HttpHandler::GetRoots(evhttp_request* req) const {
 void HttpHandler::GetProof(evhttp_request* req) const {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_GET)
     SendError(req, HTTP_BADMETHOD, "Method not allowed.");
-  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETPRBYHS);
+  if (Akamai::query_interface::instance()) {
+    Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETPRBYHS);
+  }
 
   const multimap<string, string> query(ParseQuery(req));
 
@@ -353,7 +359,9 @@ void HttpHandler::GetProof(evhttp_request* req) const {
 void HttpHandler::GetSTH(evhttp_request* req) const {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_GET)
     SendError(req, HTTP_BADMETHOD, "Method not allowed.");
-  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETSTH);
+  if (Akamai::query_interface::instance()) {
+    Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETSTH);
+  }
 
   const SignedTreeHead& sth(log_lookup_->GetSTH());
 
@@ -375,7 +383,9 @@ void HttpHandler::GetConsistency(evhttp_request* req) const {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_GET) {
     SendError(req, HTTP_BADMETHOD, "Method not allowed.");
   }
-  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETSTHCNS);
+  if (Akamai::query_interface::instance()) {
+    Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETSTHCNS);
+  }
 
   const multimap<string, string> query(ParseQuery(req));
 
@@ -408,7 +418,9 @@ void HttpHandler::GetConsistency(evhttp_request* req) const {
 
 void HttpHandler::AddChain(evhttp_request* req) {
   const shared_ptr<CertChain> chain(make_shared<CertChain>());
-  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::ADDCHAIN);
+  if (Akamai::query_interface::instance()) {
+    Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::ADDCHAIN);
+  }
   if (!ExtractChain(req, chain.get())) {
     return;
   }
@@ -419,7 +431,9 @@ void HttpHandler::AddChain(evhttp_request* req) {
 
 void HttpHandler::AddPreChain(evhttp_request* req) {
   const shared_ptr<PreCertChain> chain(make_shared<PreCertChain>());
-  Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::ADDPRECHAIN);
+  if (Akamai::query_interface::instance()) {
+    Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::ADDPRECHAIN);
+  }
   if (!ExtractChain(req, chain.get())) {
     return;
   }

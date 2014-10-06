@@ -26,6 +26,11 @@ else
 fi
 NUMCERTS=$4
 LOGOUTPUT=$5
+if [ $6 == "akamai" ]; then
+  AKAMAI="--akamai_run --akamai_get_roots_from_db --akamai_db_cert=/home/dcurrie/MyStuff/AppBatteryCT/tmp/cert_db/dcurrie_testnet_kdc_ca.crt.pem --akamai_db_key=/home/dcurrie/MyStuff/AppBatteryCT/tmp/cert_db/dcurrie_testnet_kdc_ca.key.pem --akamai_Db_hostname=api-prod.dbattery.sqa2.qa.akamai.com"
+else
+  AKAMAI=""
+fi
 
 if [ "$OPENSSLDIR" != "" ]; then
   MY_OPENSSL="$OPENSSLDIR/apps/openssl"
@@ -176,12 +181,11 @@ test_ct_server() {
 
   # Set the tree signing frequency to 0 to ensure we sign as often as possible.
   echo "Starting CT server with trusted certs in $ca_file"
-  echo ../cpp/server/$SERVER --port=$MYPORT --key="$cert_dir/$log_server-key.pem" \
+  echo DWC:test_ct_server:../cpp/server/$SERVER $AKAMAI --port=$MYPORT --key=\"$cert_dir/$log_server-key.pem\" \
     --trusted_cert_file="$ca_file" --log_dir=./$LOGOUTPUT \
     --tree_signing_frequency_seconds=15 $flags &
 
-
-  ../cpp/server/$SERVER --port=$MYPORT --key="$cert_dir/$log_server-key.pem" \
+  ../cpp/server/$SERVER $AKAMAI --port=$MYPORT --key="$cert_dir/$log_server-key.pem" \
     --trusted_cert_file="$ca_file" --log_dir=./$LOGOUTPUT \
     --tree_signing_frequency_seconds=15 $flags &
 

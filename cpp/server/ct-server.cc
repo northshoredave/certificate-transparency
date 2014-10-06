@@ -458,11 +458,12 @@ int main(int argc, char* argv[]) {
                               boost::bind(&SignMerkleTree, &tree_signer,
                                           &log_lookup, FLAGS_akamai_run));
 
-  LOG(INFO) << "Create akamai query event";
-  PeriodicCallback akamai_query_event(
-      event_base, akamai->get_config().query_freq(),
-      boost::bind(&AkamaiQueryEvent,akamai,&log_lookup));
-  LOG(INFO) << "Created akamai query event";
+  if (FLAGS_akamai_run) {
+    LOG(INFO) << "Create akamai query event";
+    PeriodicCallback akamai_query_event(
+        event_base, akamai->get_config().query_freq(), 
+        boost::bind(&AkamaiQueryEvent,akamai,&log_lookup));
+  }
 
   libevent::HttpServer server(*event_base);
   if (FLAGS_akamai_run) {
