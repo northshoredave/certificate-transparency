@@ -208,7 +208,7 @@ TMPDIR=$1
 MYPORT=$2
 CERTID=$3
 
-make_cert `pwd`/$TMPDIR test$CERTID ca 127.0.0.1:$MYPORT $MYPORT false \
+make_cert `pwd`/$TMPDIR test$CERTID ca http://127.0.0.1:$MYPORT $MYPORT false \
       `pwd`/$TMPDIR/ct-server-key-public.pem
 
 
