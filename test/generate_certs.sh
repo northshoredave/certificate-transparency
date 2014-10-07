@@ -254,6 +254,13 @@ make_embedded_cert() {
       $cert_dir/$server-precert-bundle.pem
   fi
 
+    echo  ../cpp/client/ct upload \
+    --ct_server_submission=$cert_dir/$server-precert-bundle.pem \
+    --ct_server=$log_server \
+    --ct_server_public_key=$server_public_key \
+    --ct_server_response_out=$cert_dir/$server-pre-cert.proof \
+    --precert=true --logtostderr=true
+
   ../cpp/client/ct upload \
     --ct_server_submission=$cert_dir/$server-precert-bundle.pem \
     --ct_server=$log_server_url \

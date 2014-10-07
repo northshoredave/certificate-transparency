@@ -27,7 +27,7 @@ fi
 NUMCERTS=$4
 LOGOUTPUT=$5
 if [ $6 == "akamai" ]; then
-  AKAMAI="--akamai_run --akamai_get_roots_from_db --akamai_db_cert=/home/dcurrie/MyStuff/AppBatteryCT/tmp/cert_db/dcurrie_testnet_kdc_ca.crt.pem --akamai_db_key=/home/dcurrie/MyStuff/AppBatteryCT/tmp/cert_db/dcurrie_testnet_kdc_ca.key.pem --akamai_Db_hostname=api-prod.dbattery.sqa2.qa.akamai.com"
+  AKAMAI="--akamai_run --akamai_db_cert=/home/dcurrie/MyStuff/AppBatteryCT/tmp/cert_db/dcurrie_testnet_kdc_ca.crt.pem --akamai_db_key=/home/dcurrie/MyStuff/AppBatteryCT/tmp/cert_db/dcurrie_testnet_kdc_ca.key.pem --akamai_db_hostname=api-prod.dbattery.sqa2.qa.akamai.com"
 else
   AKAMAI=""
 fi
@@ -190,18 +190,18 @@ test_ct_server() {
     --tree_signing_frequency_seconds=15 $flags &
 
   server_pid=$!
-  sleep 20
+  sleep 5
 
   echo "Generating test certificates"
   for i in `seq 1 $NUMCERTS` 
   do
     echo "DWC do test$i"
-    make_cert `pwd`/$TMPDIR test$i ca 127.0.0.1 $MYPORT false \
+    make_cert `pwd`/$TMPDIR test$i ca http://127.0.0.1:$MYPORT false \
       `pwd`/$TMPDIR/ct-server-key-public.pem
     make_embedded_cert `pwd`/$TMPDIR test$i-embedded ca \
-      127.0.0.1 $MYPORT false false `pwd`/$TMPDIR/ct-server-key-public.pem
+      http://127.0.0.1:$MYPORT false false `pwd`/$TMPDIR/ct-server-key-public.pem
     make_embedded_cert `pwd`/$TMPDIR test$i-embedded-with-preca \
-      ca 127.0.0.1 $MYPORT false true `pwd`/$TMPDIR/ct-server-key-public.pem
+      ca http://127.0.0.1:$MYPORT false true `pwd`/$TMPDIR/ct-server-key-public.pem
   done
   #DWC wait until tree signs the first set of 3
   sleep 15
@@ -212,13 +212,13 @@ test_ct_server() {
   for i in `seq 1 $NUMCERTS` 
   do 
     make_cert `pwd`/$TMPDIR test$i-intermediate intermediate \
-      127.0.0.1 $MYPORT true `pwd`/$TMPDIR/ct-server-key-public.pem
+      http://127.0.0.1:$MYPORT true `pwd`/$TMPDIR/ct-server-key-public.pem
     make_embedded_cert `pwd`/$TMPDIR \
-      test$i-embedded-with-intermediate intermediate 127.0.0.1 8124 true \
+      test$i-embedded-with-intermediate intermediate http://127.0.0.1:$MYPORT true \
         false `pwd`/$TMPDIR/ct-server-key-public.pem
     make_embedded_cert `pwd`/$TMPDIR \
-      test$i-embedded-with-intermediate-preca intermediate 127.0.0.1 \
-        $MYPORT true true `pwd`/$TMPDIR/ct-server-key-public.pem
+      test$i-embedded-with-intermediate-preca intermediate http://127.0.0.1:$MYPORT \
+        true true `pwd`/$TMPDIR/ct-server-key-public.pem
   done
 
   # Wait a bit to ensure the server signs the tree.

@@ -36,6 +36,9 @@ audit() {
   sct=$3
 
   set +e
+  echo DWC ../cpp/client/ct audit --ct_server="$SERVER" \
+      --ct_server_public_key=$CT_KEY \
+          --ssl_client_ct_data_in=$sct --logtostderr=true
   ../cpp/client/ct audit --ct_server="$SERVER" \
     --ct_server_public_key=$CT_KEY \
     --ssl_client_ct_data_in=$sct --logtostderr=true
@@ -51,6 +54,8 @@ do_audit() {
   while true
   do
     audit $CERT_DIR ca $ct_data
+    sleep 2
+    echo DWC after audit call
     if [ $retcode -eq 0 ]; then
       echo "PASS"
       let PASSED=$PASSED+1
@@ -70,6 +75,9 @@ do_audit() {
 get_sth() {
   local file=$1
 
+  echo DWC ../cpp/client/ct sth --ct_server="$SERVER" \
+      --ct_server_public_key=$CT_KEY --logtostderr=true \
+          --ct_server_response_out=$file
   ../cpp/client/ct sth --ct_server="$SERVER" \
     --ct_server_public_key=$CT_KEY --logtostderr=true \
     --ct_server_response_out=$file
@@ -97,6 +105,7 @@ get_sth $CERT_DIR/sth1
 
 make_cert $CERT_DIR test ca $SERVER false $CT_KEY
 make_embedded_cert $CERT_DIR test-embedded ca $SERVER true false $CT_KEY
+sleep 60
 
 # Do the audits together, quicker that way.
 # test-*-cert.ctdata is made by make_cert.
