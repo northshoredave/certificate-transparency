@@ -765,7 +765,7 @@ bool CertTables::pending_add(const ct::LoggedCertificatePB* lcpb) {
   LOG(INFO) << "CT:pa pending_add";
   uint64_t current_time = util::TimeInMilliseconds();
   //Comparing in ms, so must convert max_peer_age from seconds
-  uint64_t max_hb_age = getHBD()->get_timestamp()+0.5*_cnfgd->max_peer_age()*1000;
+  uint64_t max_hb_age = getHBD()->get_timestamp()*1000+0.5*_cnfgd->max_peer_age()*1000;
   CHECK_LE(current_time,max_hb_age) 
       << "CT:pa Your heartbeat hasn't updated recently, can't accept pending.";
   //Check if the current last entry can hold the new data, if not get the next key
