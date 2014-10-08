@@ -454,13 +454,16 @@ int main(int argc, char* argv[]) {
   ThreadPool pool;
   HttpHandler handler(&log_lookup, db, &checker, &frontend, &pool);
 
+  LOG(INFO) << "Create tree signing event "
+            << FLAGS_tree_signing_frequency_seconds;
   PeriodicCallback tree_event(event_base, FLAGS_tree_signing_frequency_seconds,
                               boost::bind(&SignMerkleTree, &tree_signer,
                                           &log_lookup, FLAGS_akamai_run));
 
+  PeriodicCallback* akamai_query_event(NULL);
   if (FLAGS_akamai_run) {
-    LOG(INFO) << "Create akamai query event";
-    PeriodicCallback akamai_query_event(
+    LOG(INFO) << "Create akamai query event " << akamai->get_config().query_freq();
+    akamai_query_event = new PeriodicCallback(
         event_base, akamai->get_config().query_freq(), 
         boost::bind(&AkamaiQueryEvent,akamai,&log_lookup));
   }
@@ -477,6 +480,7 @@ int main(int argc, char* argv[]) {
 
   event_base->Dispatch();
   if (akamai) { delete akamai; }
+  if (akamai_query_event) { delete akamai_query_event; }
 
   return 0;
 }
