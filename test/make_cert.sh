@@ -176,8 +176,6 @@ make_cert() {
     --ct_server_public_key=$server_public_key \
     --ct_server_response_out=$cert_dir/$server-cert.proof \
     --logtostderr=true $HTTP_LOG
-  echo DWC after upload
-  return
 
   # Create a wrapped SCT
   ../cpp/client/ct wrap --alsologtostderr \

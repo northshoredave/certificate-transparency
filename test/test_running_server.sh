@@ -55,7 +55,7 @@ do_audit() {
   do
     audit $CERT_DIR ca $ct_data
     sleep 2
-    echo DWC after audit call
+    echo DWC after audit call $retcode
     if [ $retcode -eq 0 ]; then
       echo "PASS"
       let PASSED=$PASSED+1
