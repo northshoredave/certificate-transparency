@@ -28,7 +28,7 @@ template <class Logged, class LoggedList> int
 DataBatteryDB<Logged,LoggedList>::update_from_data_battery(uint tree_size) {
   LOG(INFO) << "update_from_data_battery call from tree_size " << tree_size;
   //Lock the mutex to make sure leaves thread doesn't update
-  LeavesData* ld = _cert_tables->getLD();
+  LeavesData* ld = _cert_tables->get_ld();
   pthread_mutex_lock(&ld->_mutex);
   int max_seq_id(-1);
   for (int i = tree_size; i < ld->_leaves.logged_certificate_pbs_size(); ++i) {

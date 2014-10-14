@@ -115,7 +115,7 @@ namespace Akamai {
         DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
             FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key, FLAGS_akamai_sleep);
         DataBattery* cnfg_db = new DataBattery(db_settings);
-        CHECK(cnfg_db->isGood()) << "Failed to create DataBattery instance for cnfg_db";
+        CHECK(cnfg_db->is_good()) << "Failed to create DataBattery instance for cnfg_db";
         //Need to query databattery to get max size of a value in DB table and to get config, so use cnfg_db before
         // giving it away
         string value;
@@ -140,7 +140,7 @@ namespace Akamai {
 
         //DataBattery is owned and deleted by the object it's given to in all cases
         DataBattery* ct_db = new DataBattery(db_settings);
-        CHECK(ct_db->isGood()) << "Failed to create DataBattery instance for ct_db";
+        CHECK(ct_db->is_good()) << "Failed to create DataBattery instance for ct_db";
         _cert_tables = new CertTables(ct_db,_id,&_pd,&_ld,&_hbd,&_cnfgd);
         //Don't create a pending index if you don't allow submissions
         if (FLAGS_akamai_allow_cert_sub) { _cert_tables->init_pending_data(&_pd); }
@@ -148,7 +148,7 @@ namespace Akamai {
         //Create heartbeat thread if you allow submissions
         if (FLAGS_akamai_allow_cert_sub) {
           DataBattery* hd_db = new DataBattery(db_settings);
-          CHECK(hd_db->isGood()) << "Failed to create DataBattery instance for hd_db";
+          CHECK(hd_db->is_good()) << "Failed to create DataBattery instance for hd_db";
           _hbtd = new heartbeat_thread_data(hd_db,_id,&_hbd,&_cnfgd);
           CHECK(create_heartbeat_thread(_hbtd));
         }
@@ -156,7 +156,7 @@ namespace Akamai {
         
         //Create leaves thread data but don't start until after SQLiteDB created
         DataBattery* ld_db = new DataBattery(db_settings);
-        CHECK(ld_db->isGood()) << "Failed to create DataBattery instance for ld_db";
+        CHECK(ld_db->is_good()) << "Failed to create DataBattery instance for ld_db";
         _ltd = new leaves_thread_data(ld_db,&_ld,&_cnfgd);  
         CHECK(create_leaves_thread(_ltd));
         //End of leaves thread
@@ -164,7 +164,7 @@ namespace Akamai {
         //Create commit thread if you allow submissions
         if (FLAGS_akamai_allow_cert_sub) {
           DataBattery* cct_db = new DataBattery(db_settings);
-          CHECK(cct_db->isGood()) << "Failed to create DataBattery instance for cct_db";
+          CHECK(cct_db->is_good()) << "Failed to create DataBattery instance for cct_db";
           _commit_cert_tables = new CertTables(cct_db,_id,&_pd,&_ld,&_hbd,&_cnfgd);
           _ctd = new commit_thread_data(_commit_cert_tables,&_cnfgd);
           CHECK(create_commit_thread(_ctd));
@@ -176,7 +176,7 @@ namespace Akamai {
         DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
             FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,FLAGS_akamai_sleep);
         DataBattery db(db_settings);
-        CHECK(db.isGood()) << "Failed to create DataBattery instance for db";
+        CHECK(db.is_good()) << "Failed to create DataBattery instance for db";
         string data;
         CHECK(db.GET_key_from_table(_cnfgd.db_root_table(),_cnfgd.db_root_key(),_cnfgd.db_max_entry_size(),
               data)) << "Failed to retrieve roots from DB";

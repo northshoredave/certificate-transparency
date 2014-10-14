@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
   DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
   FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,5);
   DataBattery* db = new DataBattery(db_settings);
-  CHECK(db->isGood()) << "Failed to create DataBattery instance for db";
+  CHECK(db->is_good()) << "Failed to create DataBattery instance for db";
 
   //Read in the input file and submit to DB
   ct::AkamaiConfig actmp;

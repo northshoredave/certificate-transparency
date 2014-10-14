@@ -81,8 +81,8 @@ namespace Akamai {
       }
         
       //Protobuf calls
-      bool ParseFromString(std::string data) { return _dbIndex.ParseFromString(data); }
-      bool SerializeToString(std::string* data) const { return _dbIndex.SerializeToString(data); }
+      bool parse_from_string(std::string data) { return _dbIndex.ParseFromString(data); }
+      bool serialize_to_string(std::string* data) const { return _dbIndex.SerializeToString(data); }
       //Simply return all integers as strings between first and last as keys
       void get_all_keys_from_key(uint64_t key, std::vector<std::string>& keys) const {
         if (key < first_key()) { generate_keys(first_key(),last_key(),keys); }
@@ -168,7 +168,7 @@ namespace Akamai {
       }
       
       //check to see if DataBattery was built properly
-      bool isGood() const { return _ctx!=NULL; }
+      bool is_good() const { return _ctx!=NULL; }
 
       //Get the index for the given table.  Modifying the index doesn't take effect on the db table until you
       //commit it using putIndex
@@ -246,7 +246,7 @@ namespace Akamai {
         pthread_mutex_init(&_mutex,NULL);
       }
       void gen_key_values(std::vector<std::pair<std::string, std::string> >& kv_pairs) const;
-      bool ParseFromString(std::string value) {
+      bool parse_from_string(std::string value) {
         bool ret(false);
         pthread_mutex_lock(&_mutex);
         ret = _config.ParseFromString(value);
@@ -321,8 +321,8 @@ namespace Akamai {
         , _max_age(max_age*1000)
       {}
       //Protobuf calls
-      bool ParseFromString(std::string data) { return _peers.ParseFromString(data); }
-      bool SerializeToString(std::string* data) const { return _peers.SerializeToString(data); }
+      bool parse_from_string(std::string data) { return _peers.ParseFromString(data); }
+      bool serialize_to_string(std::string* data) const { return _peers.SerializeToString(data); }
       //Extract out all the ids of the peers and return as set of strings
       void get_peer_set(std::set<std::string>& peers) const;
       void get_removed_peer_set(std::set<std::string>& peers,uint age) const;
@@ -445,11 +445,11 @@ namespace Akamai {
       void set_my_id(std::string id) { _my_id = id; }
       //Mutex protected data that we need to access for the get_all_leaves,pending_add,commit_pending and 
       //  clear_pending
-      DataBattery* getDB() const { return _db; }
-      PendingData* getPD() const { return _pd; }
-      LeavesData* getLD() const { return _ld; }
-      HeartBeatData* getHBD() const { return _hbd; }
-      ConfigData* getCNFGD() const { return _cnfgd; }
+      DataBattery* get_db() const { return _db; }
+      PendingData* get_pd() const { return _pd; }
+      LeavesData* get_ld() const { return _ld; }
+      HeartBeatData* get_hdb() const { return _hbd; }
+      ConfigData* get_cfngd() const { return _cnfgd; }
 
       uint64_t get_max_entry_size() const { return _cnfgd->db_max_entry_size(); }
       //Return what order you are in the list of peers
@@ -462,9 +462,9 @@ namespace Akamai {
 
     private:
       //Retrieve the peers
-      bool get_peers(Peers& p) { return p.GET(getDB(),get_pending_table_name()); }
+      bool get_peers(Peers& p) { return p.GET(get_db(),get_pending_table_name()); }
       //Puts the peers back in the appropriate key and table
-      bool put_peers(const Peers& p) { return p.PUT(getDB(),get_pending_table_name()); }
+      bool put_peers(const Peers& p) { return p.PUT(get_db(),get_pending_table_name()); }
       //Get the pending keys of a particular peer.  I.e. the id.<int> keys
       bool get_pending_peer_keys(std::string peer, std::vector<std::string>& keys);
       //Get the data for a single key (which may be a number of certs)
@@ -547,7 +547,7 @@ namespace Akamai {
    *  _peer_delay: how much to delay commit depending on your peer ordering.  Does not apply to
    *     first commit attempt when restarting.
    */
-  class commit_thread_data:public Timestamp {
+  struct commit_thread_data:public Timestamp {
     public:
       commit_thread_data(CertTables* ct, ConfigData* cnfgd)
         : _cert_tables(ct), _cnfgd(cnfgd)

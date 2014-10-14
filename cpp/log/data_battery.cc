@@ -135,7 +135,7 @@ bool Peers::GET(DataBattery* db, string tablename) {
     LOG(INFO) << "PEERS: Failed to retrieve table '" << tablename << "' peers";
     return false;
   }
-  if (!ParseFromString(data)) {
+  if (!parse_from_string(data)) {
     LOG(ERROR) << "PEERS: Failed to parse peers ";
     return false;
   }
@@ -144,7 +144,7 @@ bool Peers::GET(DataBattery* db, string tablename) {
 
 bool Peers::PUT(DataBattery* db, string tablename) const {
   string data;
-  if (!SerializeToString(&data)) {
+  if (!serialize_to_string(&data)) {
     LOG(ERROR) << "PEERS: Failed to serialize peers";
     return false;
   }
@@ -206,7 +206,7 @@ bool DataBattery::get_index(string table, string index_key, DBIndex& index) {
     LOG(ERROR) << "DB: Failed to retrieve table " << table << " index"; 
     return false;
   }
-  if (!index.ParseFromString(data)) {
+  if (!index.parse_from_string(data)) {
     LOG(ERROR) << "DB: Failed to parse table " << table << " index";
     return false;
   }
@@ -215,7 +215,7 @@ bool DataBattery::get_index(string table, string index_key, DBIndex& index) {
 
 bool DataBattery::put_index(string table, string index_key, const DBIndex& index) {
   string data;
-  if (!index.SerializeToString(&data)) {
+  if (!index.serialize_to_string(&data)) {
     LOG(ERROR) << "DB: Failed to serialize index for table " << table;
     return false;
   }
@@ -455,8 +455,8 @@ bool CertTables::get_last_leaves(DBIndex& index, ct::LoggedCertificatePBList& le
   index.get_last_key(last_key);
 
   string data;
-  if (!getDB()->GET_key_from_table(get_leaves_table_name(),last_key,get_max_entry_size(),data)) { 
-    if (getDB()->get_error_status() != 404 || last_key != "0") {
+  if (!get_db()->GET_key_from_table(get_leaves_table_name(),last_key,get_max_entry_size(),data)) { 
+    if (get_db()->get_error_status() != 404 || last_key != "0") {
       return false; 
     }
   }
@@ -530,7 +530,7 @@ bool CertTables::add_leaves(ct::LoggedCertificatePBList& lcpbl, uint commit_dela
     if (lcpb.ByteSize() > remaining_size) {
       string tmp;
       last.SerializeToString(&tmp);
-      if (!getDB()->PUT(get_leaves_table_name(),last_key,tmp)) { return false; }
+      if (!get_db()->PUT(get_leaves_table_name(),last_key,tmp)) { return false; }
       last.Clear();
       remaining_size = get_max_entry_size();
       last_key = index.add_key();
@@ -544,7 +544,7 @@ bool CertTables::add_leaves(ct::LoggedCertificatePBList& lcpbl, uint commit_dela
   string tmp;
   last.SerializeToString(&tmp);
   LOG(INFO) << "CT:al commit outside loop key:"<<last_key<<" size:" << last.logged_certificate_pbs_size();
-  if (!getDB()->PUT(get_leaves_table_name(),last_key,tmp)) { return false; }
+  if (!get_db()->PUT(get_leaves_table_name(),last_key,tmp)) { return false; }
 
   //Update timestamp on index and commit it to complete the update
   index.update_timestamp();
@@ -591,13 +591,13 @@ void CertTables::init_pending_data(PendingData* pd) {
   pd->_pending_index.get_last_key(get_my_id(),last_key);
   //Get the last entry in the pending table
   if (!get_key_data(get_pending_table_name(),last_key,pd->_last_pending_value)) {
-    CHECK(getDB()->get_error_status() == 404 && pd->_pending_index.last_key() == 0)<<"CT: Failed to get last pending";
+    CHECK(get_db()->get_error_status() == 404 && pd->_pending_index.last_key() == 0)<<"CT: Failed to get last pending";
     //No pending list in first key, add one
     ct::LoggedCertificatePBList lcpbl;
     string data;
     lcpbl.SerializeToString(&data);
     LOG(INFO) << "CT: adding to pending key " << last_key;
-    CHECK(getDB()->PUT(get_pending_table_name(),last_key,data)) << "CT:Failed to add last pending";
+    CHECK(get_db()->PUT(get_pending_table_name(),last_key,data)) << "CT:Failed to add last pending";
   }
 }
 
@@ -651,7 +651,7 @@ bool CertTables::commit_pending(uint64_t min_age, uint64_t commit_delay) {
       ct::LoggedCertificatePBList lcpbl;
       if (!get_key_data(get_pending_table_name(),*kIt,lcpbl)) { 
         //This isn't fatal if the key was 0 and missing (might be an empty table)
-        if (getDB()->get_error_status() == 404 && zero_index(*pIt,*kIt)) {
+        if (get_db()->get_error_status() == 404 && zero_index(*pIt,*kIt)) {
           continue;
         } else {
           LOG(ERROR) << "CT:cp couldn't get key " << *kIt;
@@ -700,11 +700,11 @@ void CertTables::clear_pending(const set<string>& leaves_hash) {
   LOG(INFO) << "CT:clrp clear_pending";
   vector<string> keys;
   uint64_t pending_first_key, pending_last_key;
-  pthread_mutex_lock(&getPD()->_mutex);
-  getPD()->_pending_index.get_all_keys(get_my_id(),keys);
-  pending_first_key = getPD()->_pending_index.first_key();
-  pending_last_key = getPD()->_pending_index.last_key();
-  pthread_mutex_unlock(&getPD()->_mutex);
+  pthread_mutex_lock(&get_pd()->_mutex);
+  get_pd()->_pending_index.get_all_keys(get_my_id(),keys);
+  pending_first_key = get_pd()->_pending_index.first_key();
+  pending_last_key = get_pd()->_pending_index.last_key();
+  pthread_mutex_unlock(&get_pd()->_mutex);
 
   uint64_t new_first_key = pending_first_key;
   LOG(INFO) << "CT:clrp first_key " << new_first_key;
@@ -727,18 +727,18 @@ void CertTables::clear_pending(const set<string>& leaves_hash) {
     LOG(INFO) << "CT:clrp safe to remove key " << *kIt << " ind " << new_first_key;
   }
   if (new_first_key != pending_first_key) {
-    pthread_mutex_lock(&getPD()->_mutex);
+    pthread_mutex_lock(&get_pd()->_mutex);
     LOG(INFO) << "CT:clrp new first_key " << new_first_key << " index " << pending_first_key;
-    getPD()->_pending_index.set_first_key(new_first_key);
-    put_pending_index(get_my_id(),getPD()->_pending_index);
-    pthread_mutex_unlock(&getPD()->_mutex);
+    get_pd()->_pending_index.set_first_key(new_first_key);
+    put_pending_index(get_my_id(),get_pd()->_pending_index);
+    pthread_mutex_unlock(&get_pd()->_mutex);
   }
 }
 
 bool CertTables::get_pending_index(string id, DBIndex& index) {
   string index_key = id+string(".index");
   LOG(INFO) << "CT: get_pending_index key " << index_key;
-  if (!getDB()->get_index(get_pending_table_name(),index_key,index)) {
+  if (!get_db()->get_index(get_pending_table_name(),index_key,index)) {
     LOG(ERROR) << "Failed to get index from " << get_pending_table_name();
     return false;
   }
@@ -747,7 +747,7 @@ bool CertTables::get_pending_index(string id, DBIndex& index) {
 
 bool CertTables::put_pending_index(string id, const DBIndex& index) {
   string index_key = id+string(".index");
-  if (!getDB()->put_index(get_pending_table_name(),index_key,index)) {
+  if (!get_db()->put_index(get_pending_table_name(),index_key,index)) {
     LOG(ERROR) << "Failed to commit index to " << get_pending_table_name() << " id: " << id;
     return false;
   }
@@ -765,47 +765,47 @@ bool CertTables::pending_add(const ct::LoggedCertificatePB* lcpb) {
   LOG(INFO) << "CT:pa pending_add";
   uint64_t current_time = util::TimeInMilliseconds();
   //Comparing in ms, so must convert max_peer_age from seconds
-  uint64_t max_hb_age = getHBD()->get_timestamp()*1000+0.5*_cnfgd->max_peer_age()*1000;
+  uint64_t max_hb_age = get_hdb()->get_timestamp()*1000+0.5*_cnfgd->max_peer_age()*1000;
   CHECK_LE(current_time,max_hb_age) 
       << "CT:pa Your heartbeat hasn't updated recently, can't accept pending.";
   //Check if the current last entry can hold the new data, if not get the next key
   string key;
-  pthread_mutex_lock(&getPD()->_mutex);
-  getPD()->_pending_index.get_last_key(get_my_id(),key); 
-  pthread_mutex_unlock(&getPD()->_mutex);
+  pthread_mutex_lock(&get_pd()->_mutex);
+  get_pd()->_pending_index.get_last_key(get_my_id(),key); 
+  pthread_mutex_unlock(&get_pd()->_mutex);
   bool new_key(false);
-  if ((uint)(lcpb->ByteSize()+getPD()->_last_pending_value.ByteSize()) >= get_max_entry_size()) {
+  if ((uint)(lcpb->ByteSize()+get_pd()->_last_pending_value.ByteSize()) >= get_max_entry_size()) {
     //Modifying a shared data structure, so lock it.  Even though the clear method shouldn't modify the same
     //  attributes.  Only pending_index is accessed in 2 threads.  _last_pending_value is only modified in one
     //  thread.
-    pthread_mutex_lock(&getPD()->_mutex);
-    key = get_my_id() + string(".") + getPD()->_pending_index.add_key();
-    pthread_mutex_unlock(&getPD()->_mutex);
+    pthread_mutex_lock(&get_pd()->_mutex);
+    key = get_my_id() + string(".") + get_pd()->_pending_index.add_key();
+    pthread_mutex_unlock(&get_pd()->_mutex);
     //Reset the lcpbl (this is just a local copy, not the database)
-    getPD()->_last_pending_value.clear_logged_certificate_pbs();
+    get_pd()->_last_pending_value.clear_logged_certificate_pbs();
     new_key = true;
     LOG(INFO) << "CT:pa new key " << key;
   }
   
-  ct::LoggedCertificatePB* new_lcpb = getPD()->_last_pending_value.add_logged_certificate_pbs();
+  ct::LoggedCertificatePB* new_lcpb = get_pd()->_last_pending_value.add_logged_certificate_pbs();
   new_lcpb->CopyFrom(*lcpb);
 
   //Commit data
   string data;
-  getPD()->_last_pending_value.SerializeToString(&data);
-  if (!getDB()->PUT(get_pending_table_name(),key,data)) {
+  get_pd()->_last_pending_value.SerializeToString(&data);
+  if (!get_db()->PUT(get_pending_table_name(),key,data)) {
     LOG(ERROR) << "CT:pa Failed to commit pending key " << key;
     return false;
   }
   //Commit index, if you added a new key
   if (new_key) {
     //lock mutex here to make sure that clean up doesn't overwrite my pending index update
-    pthread_mutex_lock(&getPD()->_mutex);
-    if (!put_pending_index(get_my_id(),getPD()->_pending_index)) { 
-      pthread_mutex_unlock(&getPD()->_mutex);
+    pthread_mutex_lock(&get_pd()->_mutex);
+    if (!put_pending_index(get_my_id(),get_pd()->_pending_index)) { 
+      pthread_mutex_unlock(&get_pd()->_mutex);
       return false; 
     } 
-    pthread_mutex_unlock(&getPD()->_mutex);
+    pthread_mutex_unlock(&get_pd()->_mutex);
   }
 
   LOG(INFO) << "CT:pa finished pending_add";
@@ -815,7 +815,7 @@ bool CertTables::pending_add(const ct::LoggedCertificatePB* lcpb) {
 
 bool CertTables::get_key_data(string table, string key, ct::LoggedCertificatePBList& lcpbl) {
   string data;
-  if (!getDB()->GET_key_from_table(table,key,get_max_entry_size(),data)) { return false; }
+  if (!get_db()->GET_key_from_table(table,key,get_max_entry_size(),data)) { return false; }
 
   if (!lcpbl.ParseFromString(data)) {
     LOG(ERROR) << "CT: Parse error from table " << table << " for key " << key;
@@ -914,7 +914,7 @@ void* ConfigUpdate(void* arg) {
       LOG(WARNING) << "Failed to update config";
       sleep_time = cnfgtd->_cd->short_sleep();
     } else {
-      cnfgtd->_cd->ParseFromString(value);
+      cnfgtd->_cd->parse_from_string(value);
       cnfgtd->_cd->update_time();
       sleep_time = cnfgtd->_cd->config_delay();
     }
@@ -929,7 +929,7 @@ bool Akamai::create_config_thread(config_thread_data* cnfgtd) {
     LOG(ERROR) << "Failed to get config";
     return false;
   }
-  if (!cnfgtd->_cd->ParseFromString(value)) {
+  if (!cnfgtd->_cd->parse_from_string(value)) {
     LOG(ERROR) << "Failed to parse config";
     return false;
   }
@@ -1005,10 +1005,10 @@ void* CommitThread(void* arg) {
       //Try cleaning up you pending table to reflect the latest committed leaves
       //  The leaves hash is the list of leaves we got from the DB leaves table, i.e. gauranteed to have been
       //committed, so safe to remove from pending.  Lock to make sure we're not updating as we read it.
-      pthread_mutex_lock(&ctd->_cert_tables->getLD()->_mutex);
+      pthread_mutex_lock(&ctd->_cert_tables->get_ld()->_mutex);
       //Make a copy so I can release lock
-      set<string> leaves_hash = ctd->_cert_tables->getLD()->_leaves_hash; 
-      pthread_mutex_unlock(&ctd->_cert_tables->getLD()->_mutex);
+      set<string> leaves_hash = ctd->_cert_tables->get_ld()->_leaves_hash; 
+      pthread_mutex_unlock(&ctd->_cert_tables->get_ld()->_mutex);
       //See if you clear anything out of pending
       ctd->_cert_tables->clear_pending(leaves_hash);
       //Figure out your sleep time 

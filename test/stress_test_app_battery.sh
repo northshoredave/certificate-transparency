@@ -9,15 +9,17 @@ set -e
 PASSED=0
 FAILED=0
 
-if [ $# \< 2 ]
+if [ $# \< 5 ]
 then
-  echo "$0 <certificate directory> <CT server public key> [<server> [<port>]]"
+  echo "$0 <certificate directory> <CT server public key> <server> <start cert id> <end cert id>"
   exit 1
 fi
 
 CERT_DIR=$1
 CT_KEY=$2
-SERVER=${3:-"127.0.0.1:800"}
+SERVER=$3
+STARTID=$4
+ENDID=$5
 
 echo $SERVER
 
@@ -129,7 +131,7 @@ pick_port() {
 
 
 
-counter=141
+counter=$STARTID
 while true
 do
   echo $counter
@@ -168,7 +170,7 @@ do
   #get_entries 0 2 $SERVER:$port
   
   (( counter += 1 ))
-  if [ $counter -eq 340 ] 
+  if [ $counter -eq $ENDID ] 
   then
     break
   fi

@@ -103,6 +103,20 @@ TEST_F(ScanHeaderTest,GoodGETSingleLine) {
   ASSERT_STREQ(_head,"MySecondEntry");
 }
 
+TEST_F(ScanHeaderTest,RobustTest) { 
+  ScanHeader sh(200);
+  //Single valid
+  strcpy(_recvline,"HTTP/1.0 200 OK\r\nServer: dbattery/1.1\r\nContent-Length: 13\r\nETag: \"7650ddb2d4e19847dd323f044604d3625bb7c0672a9083134acef328f50e88af\"\r\nContent-Type: CanBeAnything\r\nSupport-Id: V1GT14055236907630007\r\n\r\nMySecondEntry");
+  for (uint i = 0; i < 1000000; ++i) {
+    ScanHeader sh(200);
+    ASSERT_TRUE(sh.scan(_recvline,strlen(_recvline),&_head,_len));
+  }
+  //ASSERT_TRUE(sh.get_found_status());
+ // ASSERT_EQ(sh.get_status(),200);
+  //ASSERT_TRUE(sh.finished_header());
+  //ASSERT_STREQ(_head,"MySecondEntry");
+}
+
 
 TEST_F(ScanHeaderTest,GoodGETMultipleLines) { 
   ScanHeader sh(200);
@@ -159,9 +173,9 @@ class DBIndexTest : public ::testing::Test {
 
 TEST_F(DBIndexTest,Serialize) {
   string data;
-  _db_index.SerializeToString(&data);
+  _db_index.serialize_to_string(&data);
   DBIndex tmp;
-  tmp.ParseFromString(data);
+  tmp.parse_from_string(data);
   ASSERT_EQ(_db_index,tmp);
 }
 
@@ -309,9 +323,9 @@ class PeersTest : public ::testing::Test {
 TEST_F(PeersTest,Serialize) {
   add_a_few_peers();
   string data;
-  ASSERT_TRUE(_peers.SerializeToString(&data));
+  ASSERT_TRUE(_peers.serialize_to_string(&data));
   PeersForTest local_peers;
-  ASSERT_TRUE(local_peers.ParseFromString(data));
+  ASSERT_TRUE(local_peers.parse_from_string(data));
   ASSERT_EQ(_peers,local_peers);
 }
 
@@ -539,7 +553,7 @@ class CertTablesTest : public ::testing::Test {
         //Insert new committer into peers
         Peers p(_cnfgdv.back()->fixed_peer_delay(),_cnfgdv.back()->random_peer_delay(),
             _cnfgdv.back()->max_peer_age());
-        p.update_peer(_cert_tablesv.back()->get_my_id(),_cert_tablesv.back()->getDB(),
+        p.update_peer(_cert_tablesv.back()->get_my_id(),_cert_tablesv.back()->get_db(),
             _cert_tablesv.back()->get_pending_table_name());
       }
     }
@@ -704,7 +718,7 @@ TEST_F(DBTest,DBSetup) {
       "../../test/akamai_testdat/dcurrie_testnet_kdc_ca.crt.pem",
       "../../test/akamai_testdat/dcurrie_testnet_kdc_ca.key.pem", 5);
   local_db = new DataBattery(db_settings4);
-  ASSERT_FALSE(local_db->isGood());
+  ASSERT_FALSE(local_db->is_good());
   delete local_db;
   //Wrong user 
   DataBattery::Settings db_settings5("ct","api-prod.dbattery.sqa2.qa.akamai.com","443",
