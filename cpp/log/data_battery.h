@@ -272,8 +272,16 @@ namespace Akamai {
       pthread_mutex_unlock(&_mutex); \
       return ret
 
-      uint64_t db_max_entry_size() const { getLockMutex(_config.db_max_entry_size,uint64_t); }
-      void set_db_max_entry_size(uint64_t v) { setLockMutex(_config.set_db_max_entry_size(v)); }
+      //db_max_entry_size is more complicated because I want to take the minimum of the config and the db 
+      //  specified limit (unless config max is 0, in which case use db max)
+      uint64_t db_max_entry_size() const { 
+        pthread_mutex_lock(&_mutex);
+        uint64_t cnfg_max = _config.db_max_entry_size();
+        pthread_mutex_unlock(&_mutex);
+        if (cnfg_max == 0 || _db_limit_max_entry_size < cnfg_max) { return _db_limit_max_entry_size; }
+        else { return cnfg_max; }
+      }
+      void set_db_limit_max_entry_size(uint64_t v) { _db_limit_max_entry_size = v; }
       std::string db_leaves() const { getLockMutex(_config.db_leaves,std::string); }
       std::string db_pending() const { getLockMutex(_config.db_pending,std::string); }
       std::string db_root_table() const { getLockMutex(_config.db_root_table,std::string); }
@@ -295,6 +303,7 @@ namespace Akamai {
       
     private:
       ct::AkamaiConfig _config;
+      uint64_t _db_limit_max_entry_size; //Size limit of an entry in DB table as given by table limits
   };
 
   /*  Peers class is to codify the management of the peers entry in the pending table.  

@@ -340,8 +340,8 @@ void AsyncLogClient::GetSTH(SignedTreeHead* sth, const Callback& done) {
       new libevent::HttpRequest(bind(&DoneGetSTH, _1, sth, done)));
 
   evhttp_add_header(evhttp_request_get_output_headers(req->get()), "Host",
-                    evhttp_uri_get_host(server_uri_.get()));
-                   // "<appbattery instance hostname>");
+                    //evhttp_uri_get_host(server_uri_.get()));
+                    "ct-server.appbattery.nss1.tn.akamai.com");
 
   conn_.MakeRequest(req, EVHTTP_REQ_GET, GetPath("get-sth"));
 }
@@ -353,8 +353,8 @@ void AsyncLogClient::GetRoots(vector<shared_ptr<Cert> >* roots,
       new libevent::HttpRequest(bind(&DoneGetRoots, _1, roots, done)));
 
   evhttp_add_header(evhttp_request_get_output_headers(req->get()), "Host",
-                    evhttp_uri_get_host(server_uri_.get()));
-                   // "<appbattery instance hostname>");
+                    //evhttp_uri_get_host(server_uri_.get()));
+                    "ct-server.appbattery.nss1.tn.akamai.com");
 
   conn_.MakeRequest(req, EVHTTP_REQ_GET, GetPath("get-roots"));
 }
@@ -372,8 +372,8 @@ void AsyncLogClient::GetEntries(int first, int last,
       new libevent::HttpRequest(bind(&DoneGetEntries, _1, entries, done)));
 
   evhttp_add_header(evhttp_request_get_output_headers(req->get()), "Host",
-                    evhttp_uri_get_host(server_uri_.get()));
-                   // "<appbattery instance hostname>");
+                    //evhttp_uri_get_host(server_uri_.get()));
+                    "ct-server.appbattery.nss1.tn.akamai.com");
 
   ostringstream subpath;
   subpath << "get-entries?start=" << first << "&end=" << last;
@@ -390,8 +390,8 @@ void AsyncLogClient::QueryInclusionProof(const SignedTreeHead& sth,
       bind(&DoneQueryInclusionProof, _1, sth, proof, done)));
 
   evhttp_add_header(evhttp_request_get_output_headers(req->get()), "Host",
-                    evhttp_uri_get_host(server_uri_.get()));
-                   // "<appbattery instance hostname>");
+                    //evhttp_uri_get_host(server_uri_.get()));
+                    "ct-server.appbattery.nss1.tn.akamai.com");
 
   ostringstream subpath;
   subpath << "get-proof-by-hash?hash="
@@ -409,8 +409,8 @@ void AsyncLogClient::GetSTHConsistency(uint64_t first, uint64_t second,
       bind(&DoneGetSTHConsistency, _1, proof, done)));
 
   evhttp_add_header(evhttp_request_get_output_headers(req->get()), "Host",
-                    evhttp_uri_get_host(server_uri_.get()));
-                   // "<appbattery instance hostname>");
+                    //evhttp_uri_get_host(server_uri_.get()));
+                    "ct-server.appbattery.nss1.tn.akamai.com");
 
   ostringstream subpath;
   subpath << "get-sth-consistency?first=" << first << "&second=" << second;
@@ -458,8 +458,8 @@ void AsyncLogClient::InternalAddChain(const CertChain& cert_chain,
       new libevent::HttpRequest(bind(&DoneInternalAddChain, _1, sct, done)));
 
   evhttp_add_header(evhttp_request_get_output_headers(req->get()), "Host",
-                    evhttp_uri_get_host(server_uri_.get()));
-                   // "<appbattery instance hostname>");
+                    //evhttp_uri_get_host(server_uri_.get()));
+                    "ct-server.appbattery.nss1.tn.akamai.com");
 
   const string json_body(jsend.ToString());
   CHECK_EQ(evbuffer_add(evhttp_request_get_output_buffer(req->get()),

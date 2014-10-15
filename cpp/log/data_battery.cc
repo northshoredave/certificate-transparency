@@ -335,10 +335,7 @@ SSL* DataBattery::ssl_connect() {
 void DataBattery::disconnect(SSL* ssl) {
   if (ssl) {
     int fd = SSL_get_fd(ssl);
-    if (fd > 0) { 
-      LOG(INFO) << "DB: disconnect ssl with fd " << fd;
-      close(fd);
-    }
+    if (fd > 0) { close(fd); }
 
     SSL_shutdown(ssl);
     SSL_free(ssl);
@@ -856,6 +853,8 @@ bool CertTables::get_all_leaves(uint64_t from_key, string table_name, uint64_t m
  *The header itself is terminated by \r\n\r\n, so that combination terminates processing of the header.
  */
 bool ScanHeader::process_header(int n, char** start, int& len) {
+  //You could just reserver len, which would be exact, but it's slower.  So just reserve a reasonable size.
+  _line.reserve(500);
   for (int i = 0; i < n; ++i) {
     switch(_state) {
       case 0:
@@ -1119,7 +1118,7 @@ void ConfigData::gen_key_values(vector<pair<string, string> >& kv_pairs) const {
     const FieldDescriptor* fd = _config.GetDescriptor()->FindFieldByNumber(i);
     if (fd) {
       if (fd->is_repeated()) {
-        for (uint k = 0; k < rd->FieldSize(_config,fd); k++) {
+        for (int k = 0; k < rd->FieldSize(_config,fd); k++) {
           stringstream value;
           switch(fd->type()) {
             case FieldDescriptor::TYPE_UINT32:

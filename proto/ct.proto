@@ -251,7 +251,7 @@ message AkamaiConfig {
    * the value retrieved by doing a limits lookup on table in DB.  If not, then use min of this
    * entry and value retrieved from DB
    */
-  optional uint64 db_max_entry_size = 3 [ default = 7000 ];
+  optional uint64 db_max_entry_size = 3 [ default = 0 ];
   //Fixed wait time in seconds added to random time to verify that peer update was successfull
   optional uint64 fixed_peer_delay = 4 [ default = 3 ];
   //Random wait time in seconds added to fixed time to verify that peer update was successfull

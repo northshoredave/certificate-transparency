@@ -121,17 +121,13 @@ namespace Akamai {
         string value;
         CHECK(cnfg_db->GETLIMIT(FLAGS_akamai_db_request_bytes,value)) << "Failed to get max value size from DB";
         uint64_t db_max_entry_size = atoi(value.c_str());
-        if (_cnfgd.db_max_entry_size() != 0) {
-          _cnfgd.set_db_max_entry_size(std::min(_cnfgd.db_max_entry_size(),db_max_entry_size));
-        } else {
-          _cnfgd.set_db_max_entry_size(db_max_entry_size);
-        }
-        LOG(INFO) << "Set db_max_entry_size " << _cnfgd.db_max_entry_size();
+        _cnfgd.set_db_limit_max_entry_size(db_max_entry_size);
 
         //Now get the config
         _cnfgtd = new config_thread_data(cnfg_db,FLAGS_akamai_db_config_table,FLAGS_akamai_db_config_key,
             &_cnfgd);
         CHECK(create_config_thread(_cnfgtd));
+        LOG(INFO) << "Set db_max_entry_size " << _cnfgd.db_max_entry_size();
 
         //Init some query stuff now that you have config
         LOG(INFO) << "Set bucket_sets " << _cnfgd.bucket_sets().size() << " bucket_time " << _cnfgd.bucket_time();

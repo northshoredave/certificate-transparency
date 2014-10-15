@@ -9,6 +9,7 @@
 #include <openssl/ssl.h>
 #include <string>
 #include <fstream>
+#include <algorithm>
 
 #include "log/cert.h"
 #include "log/cert_checker.h"
@@ -108,11 +109,21 @@ void clear_removed_pending(DataBattery* db) {
     return;
   }
   set<string> peer_set;
-  p.get_removed_peer_set(peer_set,FLAGS_akamai_clear_removed_peers);
+  p.get_peer_set(peer_set);
+  set<string> removed_peer_set;
+  p.get_removed_peer_set(removed_peer_set,FLAGS_akamai_clear_removed_peers);
+  //Shoudn't have peers in both removed and active.  But just in case.
+  set<string> diff_peer_set;
+  set_difference(removed_peer_set.begin(),removed_peer_set.end(),
+                 peer_set.begin(), peer_set.end(),
+                 inserter(diff_peer_set,diff_peer_set.begin()));
+  for (set<string>::const_iterator pIt = diff_peer_set.begin();
+      pIt != diff_peer_set.end(); ++pIt) {
+    LOG(INFO) << "Diff_peer: " << *pIt;
+  }
+  clear_pending(db,diff_peer_set);
 
-  clear_pending(db,peer_set);
-
-  //Now clear the removed peers in the peerset
+  //Now clear the removed peers in the peerset.
   p.clear_removed_peers();
 
   p.PUT(db,FLAGS_akamai_db_pending);
