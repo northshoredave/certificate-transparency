@@ -246,13 +246,15 @@ DataBattery::DataBattery(const Settings& settings)
   }
   while (!failed&&SSL_CTX_use_certificate_file(_ctx,_settings._cert.c_str(),SSL_FILETYPE_PEM)!=1) {
     LOG(INFO) << "DB: Couldn't load certificate " << _settings._cert;
-    sleep(_settings._key_sleep);
+    if (_settings._key_sleep) { sleep(_settings._key_sleep); }
+    else { failed = true; break; }
   }
   LOG(INFO) << "DB: Loaded certificate " << _settings._cert;
 
   while (!failed&&SSL_CTX_use_PrivateKey_file(_ctx,_settings._pvkey.c_str(),SSL_FILETYPE_PEM)!=1) {
     LOG(INFO) << "DB: Couldn't load private key " << _settings._pvkey;
-    sleep(_settings._key_sleep);
+    if (_settings._key_sleep) { sleep(_settings._key_sleep); }
+    else { failed = true; break; }
   } 
   LOG(INFO) << "DB: Loaded private key "<< _settings._pvkey;
 

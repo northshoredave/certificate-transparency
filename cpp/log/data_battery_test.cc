@@ -489,20 +489,20 @@ TEST_F(QueryTest,QueryTables) {
   query_interface::instance()->update_tables();
 
   //Check against gold
-  string contents = read_file(_query_dir+string("/ct_main.csv"));
+  string contents = read_file(_query_dir+string("/appbatt_app_ct_main.csv"));
   ASSERT_NE("false",contents);
   ASSERT_TRUE(contents.find("500,imustbeexactlythirtytwobyteslong")!= string::npos);
 
-  contents = read_file(_query_dir+string("/ct_cert_info.csv"));
+  contents = read_file(_query_dir+string("/appbatt_app_ct_cert_info.csv"));
   ASSERT_NE("false",contents);
   ASSERT_TRUE(contents.find(",x509,") != string::npos);
   ASSERT_TRUE(contents.find(",pre-cert,") != string::npos);
 
-  contents = read_file(_query_dir+string("/ct_stats.csv"));
+  contents = read_file(_query_dir+string("/appbatt_app_ct_stats.csv"));
   ASSERT_NE("false",contents);
   ASSERT_TRUE(contents.find("19,5,6,7,8") != string::npos);
 
-  contents = read_file(_query_dir+string("/ct_req_count.csv"));
+  contents = read_file(_query_dir+string("/appbatt_app_ct_req_count.csv"));
   ASSERT_NE("false",contents);
   ASSERT_TRUE(contents.find("get-roots,2,1,2") != string::npos);
   ASSERT_TRUE(contents.find("get-roots,2,3,2") != string::npos);
@@ -716,7 +716,7 @@ TEST_F(DBTest,DBSetup) {
   //Bad key location
   DataBattery::Settings db_settings4("ct","api-prod.dbattery.sqa2.qa.akamai.com","443",
       "../../test/akamai_testdat/dcurrie_testnet_kdc_ca.crt.pem",
-      "../../test/akamai_testdat/dcurrie_testnet_kdc_ca.key.pem", 5);
+      "../../test/akamai_testdat/dcurrie_testnet_kdc_ca.key.pem", 0);
   local_db = new DataBattery(db_settings4);
   ASSERT_FALSE(local_db->is_good());
   delete local_db;
