@@ -123,8 +123,15 @@ void clear_removed_pending(DataBattery* db) {
   }
   clear_pending(db,diff_peer_set);
 
-  //Now clear the removed peers in the peerset.
-  p.clear_removed_peers();
+  //Get the peers again before clearing and re-committing.  The reason being that the index delete above may
+  // take some time.  When you commit the peers back to DB, the times are old and you've possibly lost data that
+  // might have been added while you were clearing things up.
+  if (!p.GET(db,FLAGS_akamai_db_pending)) {
+    LOG(ERROR) << "Failed to get pending before clear removed";
+    return;
+  }
+  //Now clear the removed peers in the peerset. 
+  p.clear_removed_peers(removed_peer_set);
 
   p.PUT(db,FLAGS_akamai_db_pending);
 }

@@ -114,6 +114,18 @@ void Peers::remove_dead_peers(uint64_t max_age) {
   _peers.CopyFrom(reduced_peers);
 }
 
+void Peers::clear_removed_peers(const set<string>& removed_peers_set) {
+  ct::DataBatteryPeers tmp_peers;
+  *tmp_peers.mutable_peers() = _peers.peers();
+  for (int i = 0; i < _peers.removed_peers_size(); ++i) {
+    if (removed_peers_set.find(_peers.removed_peers(i).id()) == removed_peers_set.end()) {
+      ct::DataBatteryPeers_peer* new_r_p = tmp_peers.add_removed_peers();
+      new_r_p->CopyFrom(_peers.removed_peers(i));
+    }
+  }
+  _peers.CopyFrom(tmp_peers);
+}
+
 void Peers::update_timestamp(string id, uint64_t timestamp) {
   for (int i = 0; i < _peers.peers_size(); ++i) {
     if (_peers.peers(i).id() == id) {

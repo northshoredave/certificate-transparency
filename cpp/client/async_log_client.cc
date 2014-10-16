@@ -35,6 +35,10 @@ using std::vector;
 namespace {
 
 
+const char kAkamaiAppBatteryHost[] =
+    "ct-server.default.abattery.appbattery.nss1.tn.akamai.com";
+
+
 string UriEncode(const string& input) {
   // TODO(pphaneuf): I just wanted the deleter, so std::unique_ptr
   // would have worked, but it's not available to us (C++11).
@@ -341,7 +345,7 @@ void AsyncLogClient::GetSTH(SignedTreeHead* sth, const Callback& done) {
 
   evhttp_add_header(evhttp_request_get_output_headers(req->get()), "Host",
                     //evhttp_uri_get_host(server_uri_.get()));
-                    "ct-server.appbattery.nss1.tn.akamai.com");
+                    kAkamaiAppBatteryHost);
 
   conn_.MakeRequest(req, EVHTTP_REQ_GET, GetPath("get-sth"));
 }
@@ -354,7 +358,7 @@ void AsyncLogClient::GetRoots(vector<shared_ptr<Cert> >* roots,
 
   evhttp_add_header(evhttp_request_get_output_headers(req->get()), "Host",
                     //evhttp_uri_get_host(server_uri_.get()));
-                    "ct-server.appbattery.nss1.tn.akamai.com");
+                    kAkamaiAppBatteryHost);
 
   conn_.MakeRequest(req, EVHTTP_REQ_GET, GetPath("get-roots"));
 }
@@ -373,7 +377,7 @@ void AsyncLogClient::GetEntries(int first, int last,
 
   evhttp_add_header(evhttp_request_get_output_headers(req->get()), "Host",
                     //evhttp_uri_get_host(server_uri_.get()));
-                    "ct-server.appbattery.nss1.tn.akamai.com");
+                    kAkamaiAppBatteryHost);
 
   ostringstream subpath;
   subpath << "get-entries?start=" << first << "&end=" << last;
@@ -391,7 +395,7 @@ void AsyncLogClient::QueryInclusionProof(const SignedTreeHead& sth,
 
   evhttp_add_header(evhttp_request_get_output_headers(req->get()), "Host",
                     //evhttp_uri_get_host(server_uri_.get()));
-                    "ct-server.appbattery.nss1.tn.akamai.com");
+                    kAkamaiAppBatteryHost);
 
   ostringstream subpath;
   subpath << "get-proof-by-hash?hash="
@@ -410,7 +414,7 @@ void AsyncLogClient::GetSTHConsistency(uint64_t first, uint64_t second,
 
   evhttp_add_header(evhttp_request_get_output_headers(req->get()), "Host",
                     //evhttp_uri_get_host(server_uri_.get()));
-                    "ct-server.appbattery.nss1.tn.akamai.com");
+                    kAkamaiAppBatteryHost);
 
   ostringstream subpath;
   subpath << "get-sth-consistency?first=" << first << "&second=" << second;
@@ -459,7 +463,7 @@ void AsyncLogClient::InternalAddChain(const CertChain& cert_chain,
 
   evhttp_add_header(evhttp_request_get_output_headers(req->get()), "Host",
                     //evhttp_uri_get_host(server_uri_.get()));
-                    "ct-server.appbattery.nss1.tn.akamai.com");
+                    kAkamaiAppBatteryHost);
 
   const string json_body(jsend.ToString());
   CHECK_EQ(evbuffer_add(evhttp_request_get_output_buffer(req->get()),
