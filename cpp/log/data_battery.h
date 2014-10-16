@@ -119,7 +119,7 @@ namespace Akamai {
       void set_last_key(uint64_t k) { _dbIndex.set_last_key(k); }
       uint64_t first_key() const { return _dbIndex.first_key(); }
       void set_first_key(uint64_t k) { _dbIndex.set_first_key(k); }
-      inline std::string add_key();
+      std::string add_key();
       //Used in testing, define an equality operator
       bool operator==(const DBIndex& x) const {
         return (last_update() == x.last_update()) &&
@@ -241,10 +241,10 @@ namespace Akamai {
     public:
       ConfigData() {}
       ConfigData(ct::AkamaiConfig& c)
-        : _config(c)
-      {
-        pthread_mutex_init(&_mutex,NULL);
-      }
+        : Timestamp() 
+        , _config(c)
+        , _db_limit_max_entry_size(5242880)
+      { }
       void gen_key_values(std::vector<std::pair<std::string, std::string> >& kv_pairs) const;
       bool parse_from_string(std::string value) {
         bool ret(false);
@@ -358,7 +358,7 @@ namespace Akamai {
       static std::string randByteString(int length);
 
       //Clear removed peers
-      void clear_removed_peers() { _peers.clear_removed_peers(); }
+      void clear_removed_peers(const std::set<std::string>& removed_peer_set);
     private:
       virtual uint64_t get_time() const { return util::TimeInMilliseconds(); } 
     private:
