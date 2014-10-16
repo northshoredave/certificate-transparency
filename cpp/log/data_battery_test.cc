@@ -196,6 +196,11 @@ TEST_F(DBIndexTest,Keys) {
   ASSERT_EQ((int)keys.size(),9);
   ASSERT_EQ(keys[0],"127.0.0.1.2");
   ASSERT_EQ(keys[8],"127.0.0.1.10");
+  //Check you get all keys from 0
+  _db_index.get_all_keys_from_zero("127.0.0.1",keys);
+  ASSERT_EQ((int)keys.size(),11);
+  ASSERT_EQ(keys[0],"127.0.0.1.0");
+  ASSERT_EQ(keys[8],"127.0.0.1.8");
   //Check you get all keys from 3
   _db_index.get_all_keys_from_key("127.0.0.1",3,keys);
   ASSERT_EQ((int)keys.size(),8);
@@ -213,6 +218,12 @@ TEST_F(DBIndexTest,Keys) {
   localIndex.get_all_keys("127.0.0.1",keys);
   ASSERT_EQ((int)keys.size(),1);
   ASSERT_EQ(keys[0],"127.0.0.1.0");
+  //Add a key
+  ASSERT_EQ(_db_index.first_key(),2);
+  ASSERT_EQ(_db_index.last_key(),10);
+  string new_key = _db_index.add_key();
+  ASSERT_EQ(new_key,"11");
+  ASSERT_EQ(_db_index.last_key(),11);
 }
 
 //Stub out the GET and PUT methods to just access a local map.  GET/PUT tested above with true
@@ -341,24 +352,44 @@ TEST_F(PeersTest,PeerSet) {
 
 TEST_F(PeersTest,RemoveDeadPeers) {
   add_a_few_peers();
-  //Shourld remove all but 2
+  //Should remove all but 2
   _peers.remove_dead_peers(4);
   set<string> peers;
   _peers.get_peer_set(peers);
   set<string> expected;
   expected.insert("127.0.0.3"); expected.insert("127.0.0.4");
   ASSERT_EQ(peers,expected);
+  set<string> removed_peers;
+  _peers.get_removed_peer_set(removed_peers,1);
+  expected.clear(); expected.insert("127.0.0.1"); expected.insert("127.0.0.2");
+  ASSERT_EQ(removed_peers,expected);
   _peers.incr_time(4);
   //Should remove all
   _peers.remove_dead_peers(4);
   _peers.get_peer_set(peers);
   ASSERT_TRUE(peers.empty());
+  _peers.get_removed_peer_set(removed_peers,1);
+  expected.clear(); expected.insert("127.0.0.1"); expected.insert("127.0.0.2");
+  expected.insert("127.0.0.3"); expected.insert("127.0.0.4");
+  ASSERT_EQ(removed_peers,expected);
+  //Try removing some of the removed peers (just 127.0.0.1 and 127.0.0.2)
+  set<string> tmp_peers; tmp_peers.insert("127.0.0.1"); tmp_peers.insert("127.0.0.2");
+  _peers.clear_removed_peers(tmp_peers);
+  _peers.get_removed_peer_set(removed_peers,1);
+  expected.clear(); expected.insert("127.0.0.3"); expected.insert("127.0.0.4");
+  ASSERT_EQ(removed_peers,expected);
+  //Clear out the remaining removed peers
+  _peers.clear_removed_peers(expected);
+  _peers.get_removed_peer_set(removed_peers,1);
+  ASSERT_TRUE(removed_peers.empty());
   add_a_few_peers();
   //Should remove nothing
   _peers.remove_dead_peers(100);
   _peers.get_peer_set(peers);
   expected.insert("127.0.0.1"); expected.insert("127.0.0.2");
   ASSERT_EQ(peers,expected);
+  _peers.get_removed_peer_set(removed_peers,1);
+  ASSERT_TRUE(removed_peers.empty());
 }
 
 TEST_F(PeersTest,Find) {
@@ -612,10 +643,14 @@ TEST_F(CertTablesTest, FullTest) {
       //Check that the leaves have sequential id's starting from 0
       ASSERT_EQ(lcpb.sequence_number(),(uint)i);
     }
+    //Check that all the pending certs got committed as leaves
     ASSERT_EQ(_ltdv[commitIndex]->_ld->_leaves_hash.size(),pending_hashes.size());
     ASSERT_EQ(_ltdv[commitIndex]->_ld->_leaves_hash,pending_hashes);
     for (uint i = 0; i < _num_instances; ++i) {
+      uint last_key = _cert_tablesv[i]->get_pd()->_pending_index.last_key();
       _cert_tablesv[i]->clear_pending(_ltdv[commitIndex]->_ld->_leaves_hash);
+      //Check that you removed all the committed keys except the last one
+      ASSERT_EQ(_cert_tablesv[i]->get_pd()->_pending_index.first_key(),last_key);
     }
   }
 }
@@ -676,6 +711,9 @@ TEST_F(DBTest,PUT_GET) {
   string tmp;
   ASSERT_TRUE(_db->GET_key_from_table(_leaves_table,"0",_max_entry_size,tmp));
   ASSERT_EQ(tmp,value);
+  //Try getting the DB request_bytes limit
+  ASSERT_TRUE(_db->GETLIMIT("request_bytes",tmp));
+  ASSERT_EQ("5242880",tmp);
 
   //Try to put into a non-existant table
   ASSERT_FALSE(_db->PUT("BogusTable","0",value));
