@@ -154,12 +154,13 @@ namespace Akamai {
   class DataBattery {
     public:
       struct Settings {
-        Settings(std::string app, std::string host, std::string serv, std::string cert, std::string pvkey,
-            uint32_t key_sleep)
-          : _app(app) , _host(host) , _serv(serv) , _cert(cert) , _pvkey(pvkey), _key_sleep(key_sleep)
+        Settings(std::string app, std::string host, std::string serv, std::string cert, 
+            std::string pvkey, uint32_t key_sleep, uint32_t cert_key_check_delay)
+          : _app(app) , _host(host) , _serv(serv) , _cert(cert) , _pvkey(pvkey)
+          , _key_sleep(key_sleep), _cert_key_check_delay(cert_key_check_delay)
         {}
         std::string _app, _host, _serv, _cert, _pvkey;
-        uint32_t _key_sleep;
+        uint32_t _key_sleep, _cert_key_check_delay;
       };
     public:
       DataBattery(const Settings& settings);
@@ -202,10 +203,14 @@ namespace Akamai {
       int tcp_connect();
       SSL* ssl_connect();
       void disconnect(SSL* ssl);
+      bool check_context();
 
     private:
       Settings _settings;
       SSL_CTX* _ctx;
+      time_t _last_cert; //Timestamp of last cert read. Used to check if new cert has arrived
+      time_t _last_key; //Timestamp of last cert read. Used to check if new cert has arrived
+      time_t _last_cert_check; //Last time you checked if cert had changed
       int _status; //Set when an error occurs with a GET or PUT
       static bool _loadlibraries; //Libraries only needed to be loaded once, do so when first DataBattery built
       static int _maxline;

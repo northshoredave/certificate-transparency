@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
   ct::LoadCtExtensions();
 
   DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
-  FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,5);
+  FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,5,0);
   DataBattery* db = new DataBattery(db_settings);
   CHECK(db->is_good()) << "Failed to create DataBattery instance for db";
 

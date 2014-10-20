@@ -9,6 +9,7 @@
 #include <algorithm>
 #include "log/cert.h"
 #include <google/protobuf/descriptor.h>
+#include <sys/stat.h>
 
 using namespace Akamai;
 using namespace std;
@@ -238,35 +239,49 @@ bool DataBattery::put_index(string table, string index_key, const DBIndex& index
   return true;
 }
 
-DataBattery::DataBattery(const Settings& settings)
-        : _settings(settings)
-        , _status(-1)
-{
-  //Load libraries if needed
-  if (_loadlibraries) {
-    SSL_library_init();
-    ERR_load_SSL_strings();
-    _loadlibraries = false;
-  }
-
+bool DataBattery::check_context() {
   bool failed(false);
+
+  //Get cert/key stats
+  struct stat certStat, keyStat;
+  while (stat(_settings._cert.c_str(),&certStat) != 0) {
+    LOG(INFO) << "DB: Couldn't load db certificate " << _settings._cert;
+    if (_settings._key_sleep) { sleep(_settings._key_sleep); }
+    else { failed = true; return false; }
+  }
+  while (stat(_settings._pvkey.c_str(),&keyStat) != 0) {
+    LOG(INFO) << "DB: Couldn't load db pvkey " << _settings._pvkey;
+    if (_settings._key_sleep) { sleep(_settings._key_sleep); }
+    else { failed = true; return false; }
+  }
+  //Check if you already have a ctx
+  if (_ctx) { 
+    //Check if the cert+key have changed.  If yes, re-create context.  No, just return true.
+    if (certStat.st_mtime > _last_cert &&
+        keyStat.st_mtime > _last_key) {
+      LOG(INFO) << "DB: cert and key have changed, updating context";
+      SSL_CTX_free(_ctx); 
+      _ctx = NULL;
+    } 
+  }
+  //If _ctx isn't null, then you don't need to do anything
+  if (_ctx != NULL) { return true; }
+
   //Create a new ssl context
   _ctx = SSL_CTX_new(TLSv1_client_method());
   if (!_ctx) {
     LOG(ERROR) << "DB: Failed to create CTX";
     failed = true;
   }
-  while (!failed&&SSL_CTX_use_certificate_file(_ctx,_settings._cert.c_str(),SSL_FILETYPE_PEM)!=1) {
+  if (!failed&&SSL_CTX_use_certificate_file(_ctx,_settings._cert.c_str(),SSL_FILETYPE_PEM)!=1) {
     LOG(INFO) << "DB: Couldn't load certificate " << _settings._cert;
-    if (_settings._key_sleep) { sleep(_settings._key_sleep); }
-    else { failed = true; break; }
+    failed = true;
   }
   LOG(INFO) << "DB: Loaded certificate " << _settings._cert;
 
-  while (!failed&&SSL_CTX_use_PrivateKey_file(_ctx,_settings._pvkey.c_str(),SSL_FILETYPE_PEM)!=1) {
+  if (!failed&&SSL_CTX_use_PrivateKey_file(_ctx,_settings._pvkey.c_str(),SSL_FILETYPE_PEM)!=1) {
     LOG(INFO) << "DB: Couldn't load private key " << _settings._pvkey;
-    if (_settings._key_sleep) { sleep(_settings._key_sleep); }
-    else { failed = true; break; }
+    failed = true;
   } 
   LOG(INFO) << "DB: Loaded private key "<< _settings._pvkey;
 
@@ -281,6 +296,28 @@ DataBattery::DataBattery(const Settings& settings)
     SSL_CTX_free(_ctx); 
     _ctx = NULL;
   }
+  if (!failed) {
+    _last_cert = certStat.st_mtime;
+    _last_key = keyStat.st_mtime;
+    time(&_last_cert_check);
+  }
+  return !failed;
+}
+
+DataBattery::DataBattery(const Settings& settings)
+        : _settings(settings)
+        , _ctx(NULL)
+        , _last_cert(0)
+        , _last_key(0)
+        , _status(-1)
+{
+  //Load libraries if needed
+  if (_loadlibraries) {
+    SSL_library_init();
+    ERR_load_SSL_strings();
+    _loadlibraries = false;
+  }
+  check_context();
 }
 
 int DataBattery::tcp_connect() {
@@ -431,6 +468,13 @@ bool DataBattery::GETLIMIT(string limit, string& value) {
 }
 
 bool DataBattery::METHOD(string msg, bool returnOnSuccess, string& value, uint successCode) {
+  if (_settings._cert_key_check_delay) {
+    time_t current_time;
+    time(&current_time);
+    if (current_time > _settings._cert_key_check_delay+_last_cert_check) {
+      check_context();
+    }
+  }
   SSL* ssl = ssl_connect();
   if (!ssl) { 
     LOG(WARNING) << "DB: Failed to establish ssl connection";
@@ -846,7 +890,9 @@ bool CertTables::get_all_leaves(uint64_t from_key, string table_name, uint64_t m
   vector<string> keys;
   index.get_all_keys_from_key(from_key,keys);
   vector<string> data;
+  LOG(INFO) << "CT: retrieving " << keys.size() << " keys";
   if (!db->GET_keys_from_table(table_name,keys,max_entry_size,data)) { return false; }
+  LOG(INFO) << "CT: retrieved " << keys.size() << " keys";
 
   for (uint i = 0; i < data.size(); ++i) {
     ct::LoggedCertificatePBList tmp;
@@ -1106,6 +1152,7 @@ void* LeavesThread(void *arg) {
 }
 
 bool Akamai::create_leaves_thread(leaves_thread_data* ltd) {
+  LOG(INFO) << "create_leaves_thread enter";
   //Before you create the thread, try to retrieve all of the leaves so that you can initialize the database
   if (leaves_helper(ltd) != LONG_SLEEP) {
     LOG(ERROR) << "LT: Should have returned succesfully";
@@ -1120,6 +1167,7 @@ bool Akamai::create_leaves_thread(leaves_thread_data* ltd) {
   } else {
     LOG(INFO) << "LT: Created leaves thread";
   }
+  LOG(INFO) << "create_leaves_thread exit";
   return true;
 }
 

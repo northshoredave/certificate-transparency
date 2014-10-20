@@ -71,6 +71,7 @@ DEFINE_string(akamai_tableprov_dir,"query","What directory to write query tables
 DEFINE_bool(akamai_allow_cert_sub,true,"Whether to allow cert submission (is this a query only ct?)");
 DEFINE_bool(akamai_allow_audit,true,"Whether to allow audit,proof queries?");
 DEFINE_int32(akamai_sleep,5,"How long to sleep when key is missing before trying again");
+DEFINE_int32(akamai_cert_check_delay,300,"How long in seconds to delay between checking if db access cert has changed");
 
 
 namespace libevent = cert_trans::libevent;
@@ -113,7 +114,8 @@ namespace Akamai {
         
         //First DB instance
         DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
-            FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key, FLAGS_akamai_sleep);
+            FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key, FLAGS_akamai_sleep,
+            FLAGS_akamai_cert_check_delay);
         DataBattery* cnfg_db = new DataBattery(db_settings);
         CHECK(cnfg_db->is_good()) << "Failed to create DataBattery instance for cnfg_db";
         //Need to query databattery to get max size of a value in DB table and to get config, so use cnfg_db before
@@ -165,12 +167,14 @@ namespace Akamai {
           _ctd = new commit_thread_data(_commit_cert_tables,&_cnfgd);
           CHECK(create_commit_thread(_ctd));
         }
+        LOG(INFO) << "Completed intialization";
       }
 
       void get_roots() {
         LOG(INFO) << "Get roots";
         DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
-            FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,FLAGS_akamai_sleep);
+            FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,FLAGS_akamai_sleep,
+            FLAGS_akamai_cert_check_delay);
         DataBattery db(db_settings);
         CHECK(db.is_good()) << "Failed to create DataBattery instance for db";
         string data;
