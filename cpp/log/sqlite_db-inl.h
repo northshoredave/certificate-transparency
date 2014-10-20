@@ -80,6 +80,22 @@ typename Database<Logged>::WriteResult SQLiteDB<Logged>::CreatePendingEntry_(
   return this->OK;
 }
 
+template <class Logged> typename Database<Logged>::WriteResult
+SQLiteDB<Logged>::CreateNewEntry(const std::vector<leaf_entry>& new_leaves) {
+  sqlite3_exec(db_,"BEGIN EXCLUSIVE TRANSACTION", 0, 0, 0);
+  for (std::vector<leaf_entry>::const_iterator leafIt = new_leaves.begin(); leafIt != new_leaves.end(); ++leafIt) {
+    sqlite::Statement statement(db_, "INSERT INTO leaves(hash, entry, sequence) "
+        "VALUES(?, ?, ?)");
+    statement.BindBlob(0,leafIt->_hash);
+    statement.BindBlob(1,leafIt->_data);
+    statement.BindUInt64(2,leafIt->_seqid);
+    statement.Step();
+  }
+  if (sqlite3_exec(db_, "COMMIT TRANSACTION", 0, 0, 0) != SQLITE_OK) { LOG(ERROR) << "SQL Error " << sqlite3_errmsg(db_); }
+
+  return this->OK;
+}
+
 template <class Logged>
 typename Database<Logged>::WriteResult SQLiteDB<Logged>::AssignSequenceNumber(
     const std::string& hash, uint64_t sequence_number) {
@@ -88,7 +104,6 @@ typename Database<Logged>::WriteResult SQLiteDB<Logged>::AssignSequenceNumber(
                               "WHERE hash = ? AND sequence IS NULL");
   statement.BindUInt64(0, sequence_number);
   statement.BindBlob(1, hash);
-
   int ret = statement.Step();
   if (ret == SQLITE_CONSTRAINT) {
     sqlite::Statement s2(db_,
@@ -109,7 +124,6 @@ typename Database<Logged>::WriteResult SQLiteDB<Logged>::AssignSequenceNumber(
     return this->ENTRY_NOT_FOUND;
   }
   CHECK_EQ(1, changes);
-
   return this->OK;
 }
 

@@ -31,6 +31,7 @@ DataBatteryDB<Logged,LoggedList>::update_from_data_battery(uint tree_size) {
   LeavesData* ld = _cert_tables->get_ld();
   pthread_mutex_lock(&ld->_mutex);
   int max_seq_id(-1);
+  std::vector<leaf_entry> new_leaves;
   for (int i = tree_size; i < ld->_leaves.logged_certificate_pbs_size(); ++i) {
     const Logged* lcpb = reinterpret_cast<const Logged*>(&ld->_leaves.logged_certificate_pbs(i));
     CHECK_EQ(i,(int)lcpb->sequence_number()) << "Sequence id didn't match tree size " << i << ":" << lcpb->sequence_number();
@@ -47,11 +48,18 @@ DataBatteryDB<Logged,LoggedList>::update_from_data_battery(uint tree_size) {
       }
     } else {
       LOG(INFO) << "UFDB: not in local db, adding and setting seq id " << lcpb->sequence_number();
-      SQLiteDB<Logged>::CreatePendingEntry_(*lcpb);
-      AssignSequenceNumber(hash,lcpb->sequence_number());
+      leaf_entry lfe;
+      lfe._hash = lcpb->Hash();
+      lcpb->SerializeForDatabase(&lfe._data);
+      lfe._seqid = lcpb->sequence_number();
+      new_leaves.push_back(lfe);
     }
     max_seq_id = lcpb->sequence_number();
   }
+  if (!new_leaves.empty()) {
+    this->CreateNewEntry(new_leaves);
+  }
   pthread_mutex_unlock(&ld->_mutex);
+  LOG(INFO) << "update_from_data_battery finished with max_seq_id " << max_seq_id;
   return max_seq_id;
 }

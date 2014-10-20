@@ -50,6 +50,12 @@ namespace Akamai {
       class CertTables;
 }
 
+struct leaf_entry {
+  std::string _hash;
+  std::string _data;
+  uint64_t _seqid;
+};
+
 // NOTE: This is a database interface for the log server.
 // Monitors/auditors shouldn't assume that log entries are keyed
 // uniquely by certificate hash -- it is an artefact of this
@@ -57,6 +63,7 @@ namespace Akamai {
 template <class Logged>
 class Database {
  public:
+
   enum WriteResult {
     OK,
     //Failed to add entry to DataBattery
@@ -107,6 +114,10 @@ class Database {
     return CreatePendingEntry_(logged);
   }
   virtual WriteResult CreatePendingEntry_(const Logged& logged) = 0;
+
+  //Akamai: needed so I can wrap up the startup commits to the sql database from DB into a single 
+  //  transaction.  Doing 1 transaction at a time for each leaf is 100x slower. 
+  virtual WriteResult CreateNewEntry(const std::vector<leaf_entry>& new_leaves) { return OK; }
 
   // Attempt to add a sequence number to the Logged, thereby removing
   // it from the list of pending entries.  Fail if the entry does not

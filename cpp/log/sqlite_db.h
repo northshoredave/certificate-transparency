@@ -32,6 +32,8 @@ class SQLiteDB : public Database<Logged> {
 
   virtual WriteResult CreatePendingEntry_(const Logged& logged);
 
+  virtual WriteResult CreateNewEntry(const std::vector<leaf_entry>& new_leaves);
+
   virtual WriteResult AssignSequenceNumber(const std::string& pending_hash,
                                            uint64_t sequence_number);
 
