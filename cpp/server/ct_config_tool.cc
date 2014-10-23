@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
   google::InitGoogleLogging(argv[0]);
   OpenSSL_add_all_algorithms();
   ERR_load_crypto_strings();
-  ct::LoadCtExtensions();
+  cert_trans::LoadCtExtensions();
 
   DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
   FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,5,0);

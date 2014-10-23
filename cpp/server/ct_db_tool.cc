@@ -193,12 +193,12 @@ void print_pending_indexes(DataBattery* db) {
 }
 
 void submit_root_ca(DataBattery* db, string &cert_file) {
-  ct::CertChecker checker;
+  cert_trans::CertChecker checker;
    if (!checker.LoadTrustedCertificates(cert_file)) {
      LOG(INFO) << "Opps, couldn't read cert_file " << cert_file;
    }
    ct::X509Root roots;
-   for (multimap<string,const ct::Cert*>::const_iterator cIt = checker.GetTrustedCertificates().begin();
+   for (multimap<string,const cert_trans::Cert*>::const_iterator cIt = checker.GetTrustedCertificates().begin();
        cIt != checker.GetTrustedCertificates().end(); ++cIt) {
      string der_encoding;
      LOG(INFO) << "Adding cert " << cIt->second->PrintSubjectName();
@@ -222,7 +222,7 @@ void print_root_ca(DataBattery* db) {
     LOG(INFO) << "Failed to parse roots";
   }
   for (int i = 0; i < roots.roots_size(); ++i) {
-    ct::Cert tmp;
+    cert_trans::Cert tmp;
     tmp.LoadFromDerString(roots.roots(i));
     LOG(INFO) << tmp.PrintSubjectName();
   }
@@ -233,7 +233,7 @@ int main(int argc, char* argv[]) {
   google::InitGoogleLogging(argv[0]);
   OpenSSL_add_all_algorithms();
   ERR_load_crypto_strings();
-  ct::LoadCtExtensions();
+  cert_trans::LoadCtExtensions();
 
   DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
   FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,5,0);

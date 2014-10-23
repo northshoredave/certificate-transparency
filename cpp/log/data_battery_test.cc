@@ -625,7 +625,7 @@ TEST_F(CertTablesTest, FullTest) {
     for (uint i = 0; i < _num_instances; ++i) {
       LOG(ERROR) << "id:"<<_cert_tablesv[i]->get_my_id() << " i:"<<i<<" order:"<<_cert_tablesv[i]->get_peer_order();
       ASSERT_EQ(_cert_tablesv[i]->get_peer_order(),(int)i);
-      ct::LoggedCertificate logged_cert;
+      cert_trans::LoggedCertificate logged_cert;
       for (uint j = 0; j < _num_certs; ++j) {
         _test_signer.CreateUnique(&logged_cert);
         ASSERT_TRUE(_cert_tablesv[i]->pending_add(&logged_cert));
@@ -779,7 +779,7 @@ TEST_F(DBTest,DBSetup) {
 } //namespace
     
 int main(int argc, char **argv) {
-  ct::test::InitTesting(argv[0], &argc, &argv, true);
+  cert_trans::test::InitTesting(argv[0], &argc, &argv, true);
   return RUN_ALL_TESTS();
 }
 

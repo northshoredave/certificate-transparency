@@ -609,8 +609,8 @@ bool CertTables::add_leaves(ct::LoggedCertificatePBList& lcpbl, uint commit_dela
 
 struct SCTSort {
   inline bool operator()(const ct::LoggedCertificatePB& a, const ct::LoggedCertificatePB& b) {
-    const ct::LoggedCertificate* lc_a(reinterpret_cast<const ct::LoggedCertificate*>(&a));
-    const ct::LoggedCertificate* lc_b(reinterpret_cast<const ct::LoggedCertificate*>(&b));
+    const cert_trans::LoggedCertificate* lc_a(reinterpret_cast<const cert_trans::LoggedCertificate*>(&a));
+    const cert_trans::LoggedCertificate* lc_b(reinterpret_cast<const cert_trans::LoggedCertificate*>(&b));
     if (lc_a->timestamp() != lc_b->timestamp()) {
       return lc_a->timestamp() < lc_b->timestamp();
     } else {
@@ -773,7 +773,7 @@ void CertTables::clear_pending(const set<string>& leaves_hash) {
     bool all_committed(true);
     for (int i = 0; i < lcpbl.logged_certificate_pbs_size(); ++i) {
       const ct::LoggedCertificatePB& lcpb = lcpbl.logged_certificate_pbs(i);
-      string hash = reinterpret_cast<const ct::LoggedCertificate*>(&lcpb)->Hash();
+      string hash = reinterpret_cast<const cert_trans::LoggedCertificate*>(&lcpb)->Hash();
       if (leaves_hash.find(hash) == leaves_hash.end()) {
         all_committed = false; break;
       }
@@ -1113,7 +1113,7 @@ leaves_helper_enum Akamai::leaves_helper(leaves_thread_data* ltd) {
   pthread_mutex_lock(&ltd->_ld->_mutex);
   for (int i = 0; i < new_lcpbl.logged_certificate_pbs_size(); ++i) {
     const ct::LoggedCertificatePB& lcpb = new_lcpbl.logged_certificate_pbs(i);
-    string hash = reinterpret_cast<const ct::LoggedCertificate*>(&lcpb)->Hash();
+    string hash = reinterpret_cast<const cert_trans::LoggedCertificate*>(&lcpb)->Hash();
     if (ltd->_ld->_leaves_hash.find(hash) != ltd->_ld->_leaves_hash.end()) {
       continue; //You've already included this leaf
     }

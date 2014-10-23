@@ -184,7 +184,7 @@ namespace Akamai {
         CHECK(roots.ParseFromString(data)) << "Failed to parse roots from DB";
         std::ofstream ofs(FLAGS_trusted_cert_file.c_str());
         for (int i = 0; i < roots.roots_size(); ++i) {
-          ct::Cert* new_root = new ct::Cert;
+          cert_trans::Cert* new_root = new cert_trans::Cert;
           new_root->LoadFromDerString(roots.roots(i));
           string pem_enc;
           new_root->PemEncoding(&pem_enc);
@@ -223,7 +223,7 @@ namespace Akamai {
         d->_info.resize(leaves.logged_certificate_pbs_size());
         for (int i = 0; i < leaves.logged_certificate_pbs_size(); ++i) {
           const ct::LoggedCertificatePB& lcpb = leaves.logged_certificate_pbs(i);
-          ct::Cert tmp;
+          cert_trans::Cert tmp;
           if (lcpb.contents().entry().type() == 0) { 
             tmp.LoadFromDerString(lcpb.contents().entry().x509_entry().leaf_certificate());
           } else {
