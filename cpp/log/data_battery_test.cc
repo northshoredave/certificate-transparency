@@ -17,6 +17,8 @@
 #include "data_battery.h"
 #include "test_signer.h"
 
+DEFINE_string(db_hostname,"","Hostname to access DB");
+
 namespace {
 
 using namespace std;
@@ -308,7 +310,7 @@ class PeersForTest: public Peers {
 class PeersTest : public ::testing::Test {
   protected:
     PeersTest() {
-      DataBattery::Settings db_settings("ct","api-prod.dbattery.sqa2.qa.akamai.com","443",
+      DataBattery::Settings db_settings("ct",FLAGS_db_hostname,"443",
           "../../test/akamai_testdata/dcurrie_testnet_kdc_ca.crt.pem",
           "../../test/akamai_testdata/dcurrie_testnet_kdc_ca.key.pem", 5,0);
       _db = new DataBatteryTest(db_settings,&_table_key_value);
@@ -549,7 +551,7 @@ class CertTablesTest : public ::testing::Test {
       , _num_certs(5)
     {
       //Common db settings
-      DataBattery::Settings db_settings("ct","api-prod.dbattery.sqa2.qa.akamai.com","443",
+      DataBattery::Settings db_settings("ct",FLAGS_db_hostname,"443",
           "../../test/akamai_testdata/dcurrie_testnet_kdc_ca.crt.pem",
           "../../test/akamai_testdata/dcurrie_testnet_kdc_ca.key.pem", 5,0);
       //Test config
@@ -658,7 +660,7 @@ TEST_F(CertTablesTest, FullTest) {
 class DBTest : public ::testing::Test {
   protected:
     DBTest() {
-      DataBattery::Settings db_settings("ct","api-prod.dbattery.sqa2.qa.akamai.com","443",
+      DataBattery::Settings db_settings("ct",FLAGS_db_hostname,"443",
           "../../test/akamai_testdata/dcurrie_testnet_kdc_ca.crt.pem",
           "../../test/akamai_testdata/dcurrie_testnet_kdc_ca.key.pem", 5,0);
       _db = new DataBattery(db_settings);
@@ -727,7 +729,7 @@ TEST_F(DBTest,PUT_GET) {
 
 TEST_F(DBTest,DBSetup) {
   //Incorrect app, so data battery returns 404
-  DataBattery::Settings db_settings("foo","api-prod.dbattery.sqa2.qa.akamai.com","443",
+  DataBattery::Settings db_settings("foo",FLAGS_db_hostname,"443",
       "../../test/akamai_testdata/dcurrie_testnet_kdc_ca.crt.pem",
       "../../test/akamai_testdata/dcurrie_testnet_kdc_ca.key.pem", 5,0);
   DataBattery* local_db = new DataBattery(db_settings);
@@ -736,7 +738,7 @@ TEST_F(DBTest,DBSetup) {
   ASSERT_EQ(local_db->get_error_status(),404);
   delete local_db;
   //Incorrect hostname
-  DataBattery::Settings db_settings2("ct","api-prod.dattery.sqa2.qa.akamai.com","443",
+  DataBattery::Settings db_settings2("ct","broken.hostname.com","443",
       "../../test/akamai_testdata/dcurrie_testnet_kdc_ca.crt.pem",
       "../../test/akamai_testdata/dcurrie_testnet_kdc_ca.key.pem", 5,0);
   local_db = new DataBattery(db_settings2);
@@ -744,7 +746,7 @@ TEST_F(DBTest,DBSetup) {
   ASSERT_EQ(local_db->get_error_status(),-1);
   delete local_db;
   //Wrong port
-  DataBattery::Settings db_settings3("ct","api-prod.dbattery.sqa2.qa.akamai.com","445",
+  DataBattery::Settings db_settings3("ct",FLAGS_db_hostname,"445",
       "../../test/akamai_testdata/dcurrie_testnet_kdc_ca.crt.pem",
       "../../test/akamai_testdata/dcurrie_testnet_kdc_ca.key.pem", 5,0);
   local_db = new DataBattery(db_settings3);
@@ -752,14 +754,14 @@ TEST_F(DBTest,DBSetup) {
   ASSERT_EQ(local_db->get_error_status(),-1);
   delete local_db;
   //Bad key location
-  DataBattery::Settings db_settings4("ct","api-prod.dbattery.sqa2.qa.akamai.com","443",
+  DataBattery::Settings db_settings4("ct",FLAGS_db_hostname,"443",
       "../../test/akamai_testdat/dcurrie_testnet_kdc_ca.crt.pem",
       "../../test/akamai_testdat/dcurrie_testnet_kdc_ca.key.pem", 0,0);
   local_db = new DataBattery(db_settings4);
   ASSERT_FALSE(local_db->is_good());
   delete local_db;
   //Wrong user 
-  DataBattery::Settings db_settings5("ct","api-prod.dbattery.sqa2.qa.akamai.com","443",
+  DataBattery::Settings db_settings5("ct",FLAGS_db_hostname,"443",
       "../../test/akamai_testdata/bogus_testnet_kdc_ca.crt.pem",
       "../../test/akamai_testdata/bogus_testnet_kdc_ca.key.pem", 5,0);
   local_db = new DataBattery(db_settings5);
@@ -767,7 +769,7 @@ TEST_F(DBTest,DBSetup) {
   ASSERT_EQ(local_db->get_error_status(),403);
   delete local_db;
   //Key signed by the wrong CA, not accepted by DataBattery
-  DataBattery::Settings db_settings6("ct","api-prod.dbattery.sqa2.qa.akamai.com","443",
+  DataBattery::Settings db_settings6("ct",FLAGS_db_hostname,"443",
       "../../test/akamai_testdata/bogus2_testnet_kdc_ca.crt.pem",
       "../../test/akamai_testdata/bogus2_testnet_kdc_ca.key.pem", 5,0);
   local_db = new DataBattery(db_settings6);
