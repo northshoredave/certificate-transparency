@@ -410,6 +410,7 @@ bool DataBattery::GET_keys_from_table(string table,const vector<string>& keys, u
     string value;
     value.reserve(max_entry_size);
     if (!GET(table,*k,value)) {
+      if (k == keys.begin()) { LOG(INFO) << "Table is empty"; return true; }
       LOG(ERROR) << "DB: Failed to get key " << *k << " from table " << table;
       return false;
     }
@@ -890,7 +891,7 @@ bool CertTables::get_all_leaves(uint64_t from_key, string table_name, uint64_t m
   vector<string> keys;
   index.get_all_keys_from_key(from_key,keys);
   vector<string> data;
-  LOG(INFO) << "CT: retrieving " << keys.size() << " keys";
+  LOG(INFO) << "CT: retrieving " << keys.size() << " keys and data " << data.size();
   if (!db->GET_keys_from_table(table_name,keys,max_entry_size,data)) { return false; }
   LOG(INFO) << "CT: retrieved " << keys.size() << " keys";
 
@@ -1102,7 +1103,7 @@ bool Akamai::create_commit_thread(commit_thread_data* ctd) {
 
 leaves_helper_enum Akamai::leaves_helper(leaves_thread_data* ltd) {
   ct::LoggedCertificatePBList new_lcpbl;
-  uint64_t last_key;
+  uint64_t last_key(0);
   //If you failed to retrieve the leaves, then sleep for a short time and try again.
   if (!CertTables::get_all_leaves(ltd->_last_key,ltd->_cnfgd->db_leaves(), 
         ltd->_cnfgd->db_max_entry_size(),ltd->_db,new_lcpbl,last_key)) {
