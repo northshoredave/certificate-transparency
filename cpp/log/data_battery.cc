@@ -421,7 +421,7 @@ bool DataBattery::GET_keys_from_table(string table,const vector<string>& keys, u
 
 bool DataBattery::PUT(string table, string key, string value) {
   stringstream ssmsg;
-  ssmsg << "PUT /v1/apps/" << _settings._app << "/tables/" << table << "/data/" << key << " HTTP/1.0\r\n";
+  ssmsg << "PUT " << _settings._preface << _settings._app << "/tables/" << table << "/data/" << key << " HTTP/1.0\r\n";
   ssmsg << "Host: " << _settings._host << "\r\n";
   ssmsg << "Content-Type: text/plain\r\n";
   ssmsg << "Content-Length: " << value.size() << "\r\n\r\n";
@@ -437,7 +437,7 @@ bool DataBattery::GET(string table, string key, string& value) {
   value.clear();
   //Create msg to send
   stringstream ssmsg;
-  ssmsg << "GET /v1/apps/" << _settings._app << "/tables/" << table << "/data/" << key << " HTTP/1.0\r\n";
+  ssmsg << "GET " << _settings._preface << _settings._app << "/tables/" << table << "/data/" << key << " HTTP/1.0\r\n";
   ssmsg << "Host: " << _settings._host << "\r\n\r\n";
 
   string msg = ssmsg.str();
@@ -448,7 +448,7 @@ bool DataBattery::GET(string table, string key, string& value) {
 bool DataBattery::DELETE(string table, string key) {
   //Create msg to send
   stringstream ssmsg;
-  ssmsg << "DELETE /v1/apps/" << _settings._app << "/tables/" << table << "/data/" << key << " HTTP/1.0\r\n";
+  ssmsg << "DELETE " << _settings._preface << _settings._app << "/tables/" << table << "/data/" << key << " HTTP/1.0\r\n";
   ssmsg << "Host: " << _settings._host << "\r\n\r\n";
 
   string msg = ssmsg.str();
@@ -460,7 +460,7 @@ bool DataBattery::DELETE(string table, string key) {
 bool DataBattery::GETLIMIT(string limit, string& value) {
   value.clear();
   stringstream ssmsg;
-  ssmsg << "GET /v1/apps/" << _settings._app << "/limits/" << limit << " HTTP/1.0\r\n";
+  ssmsg << "GET " << _settings._preface << _settings._app << "/limits/" << limit << " HTTP/1.0\r\n";
   ssmsg << "Host: " << _settings._host << "\r\n\r\n";
 
   string msg = ssmsg.str();
@@ -1062,7 +1062,7 @@ void* CommitThread(void* arg) {
       LOG(WARNING) << "CmtT: Failed to commit " << ctd->_cert_tables->get_my_id();
       sleep(ctd->_cnfgd->short_sleep()); //Sleep for a short time and try again
     } else {
-      //Try cleaning up you pending table to reflect the latest committed leaves
+      //Try cleaning up you pending table to reflect the latest committed leave (ONLY YOUR OWN)
       //  The leaves hash is the list of leaves we got from the DB leaves table, i.e. gauranteed to have been
       //committed, so safe to remove from pending.  Lock to make sure we're not updating as we read it.
       pthread_mutex_lock(&ctd->_cert_tables->get_ld()->_mutex);

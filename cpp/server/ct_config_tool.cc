@@ -32,6 +32,7 @@
 DEFINE_string(akamai_db_app,"ct",
              "App name used by databattery for CT");
 DEFINE_string(akamai_db_hostname,"", "Hostname of DataBattery");
+DEFINE_string(akamai_db_preface,"","Preface when GET, PUT access DB");
 DEFINE_string(akamai_db_serv,"443",
               "Port or service for DataBattery");
 DEFINE_string(akamai_db_cert,"", "Cert to use when accessing DataBattery");
@@ -53,7 +54,7 @@ int main(int argc, char* argv[]) {
   cert_trans::LoadCtExtensions();
 
   DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
-  FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,5,0);
+  FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,5,0,FLAGS_akamai_db_preface);
   DataBattery* db = new DataBattery(db_settings);
   CHECK(db->is_good()) << "Failed to create DataBattery instance for db";
 

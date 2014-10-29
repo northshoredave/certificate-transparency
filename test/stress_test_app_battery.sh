@@ -9,9 +9,9 @@ set -e
 PASSED=0
 FAILED=0
 
-if [ $# \< 5 ]
+if [ $# \< 6 ]
 then
-  echo "$0 <certificate directory> <CT server public key> <server> <start cert id> <end cert id>"
+  echo "$0 <certificate directory> <CT server public key> <server> <start cert id> <end cert id> <sleep time>"
   exit 1
 fi
 
@@ -20,6 +20,7 @@ CT_KEY=$2
 SERVER=$3
 STARTID=$4
 ENDID=$5
+SLEEPTIME=$6
 
 echo $SERVER
 
@@ -142,30 +143,22 @@ do
   get_sth $CERT_DIR/sth$counter.1 $SERVER:$port
 
   #Produce certs and add to each ct instance
-  echo DWC make_cert $CERT_DIR test$counter.1 ca http://$SERVER:$port false $CT_KEY
   make_cert $CERT_DIR test$counter.1 ca http://$SERVER:$port false $CT_KEY
-  sleep 1
-  echo  DWC make_cert $CERT_DIR test$counter.2 ca http://$SERVER:$other_port false $CT_KEY
   make_cert $CERT_DIR test$counter.2 ca http://$SERVER:$other_port false $CT_KEY
-  sleep 300
+  sleep $SLEEPTIME
 
   # Do the audits.  Audit for the cert produced on the other ct instance
   do_audit $CERT_DIR/test$counter.1-cert.ctdata $SERVER:$other_port
-  sleep 1
   do_audit $CERT_DIR/test$counter.2-cert.ctdata $SERVER:$port
-  sleep 1
 
   #Get sth for other ct instance
   get_sth $CERT_DIR/sth$counter.2 $SERVER:$other_port
-  sleep 1
 
   #Check consistency on both ct instances
   echo "Check consistency on $port from $CERT_DIR/sth$counter.1 $CERT_DIR/sth$counter.2"
   consistency $CERT_DIR/sth$counter.1 $CERT_DIR/sth$counter.2 $SERVER:$port
-  sleep 1
   echo "Check consistency on $other_port from $CERT_DIR/sth$counter.1 $CERT_DIR/sth$counter.2"
   consistency $CERT_DIR/sth$counter.1 $CERT_DIR/sth$counter.2 $SERVER:$other_port
-  sleep 1
 
   #get_entries 0 2 $SERVER:$port
   

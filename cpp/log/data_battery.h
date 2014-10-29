@@ -155,11 +155,11 @@ namespace Akamai {
     public:
       struct Settings {
         Settings(std::string app, std::string host, std::string serv, std::string cert, 
-            std::string pvkey, uint32_t key_sleep, uint32_t cert_key_check_delay)
-          : _app(app) , _host(host) , _serv(serv) , _cert(cert) , _pvkey(pvkey)
+            std::string pvkey, uint32_t key_sleep, uint32_t cert_key_check_delay,std::string preface)
+          : _app(app) , _host(host) , _serv(serv) , _cert(cert) , _pvkey(pvkey), _preface(preface)
           , _key_sleep(key_sleep), _cert_key_check_delay(cert_key_check_delay)
         {}
-        std::string _app, _host, _serv, _cert, _pvkey;
+        std::string _app, _host, _serv, _cert, _pvkey, _preface;
         uint32_t _key_sleep, _cert_key_check_delay;
       };
     public:
@@ -553,7 +553,7 @@ namespace Akamai {
   };
   bool create_heartbeat_thread(heartbeat_thread_data* hbtd);
 
-  /* Commit thread is responsible for check if we should commit any pending certs.  If yes, it 
+  /* Commit thread is responsible for checking if we should commit any pending certs.  If yes, it 
    *   figures out which ones and in what order to commit them.  For more details see comment above
    *   commit_pending in data_battery.cc
    *  _min_age: in seconds.  Minimum age pending cert must be before being committed.

@@ -31,6 +31,7 @@ DataBatteryDB<Logged,LoggedList>::update_from_data_battery(uint tree_size) {
   LeavesData* ld = _cert_tables->get_ld();
   pthread_mutex_lock(&ld->_mutex);
   int max_seq_id(-1);
+  //Pick out the new entires from the leaves_data that's gathered from DataBattery
   std::vector<leaf_entry> new_leaves;
   for (int i = tree_size; i < ld->_leaves.logged_certificate_pbs_size(); ++i) {
     const Logged* lcpb = reinterpret_cast<const Logged*>(&ld->_leaves.logged_certificate_pbs(i));
@@ -44,6 +45,7 @@ DataBatteryDB<Logged,LoggedList>::update_from_data_battery(uint tree_size) {
       if (result.has_sequence_number()) {
         CHECK_EQ(result.sequence_number(),lcpb->sequence_number());
       } else {
+        //Should actually never happen
         AssignSequenceNumber(hash,lcpb->sequence_number());
       }
     } else {
@@ -56,10 +58,12 @@ DataBatteryDB<Logged,LoggedList>::update_from_data_battery(uint tree_size) {
     }
     max_seq_id = lcpb->sequence_number();
   }
+  //You can release the lock here because we're done with gathering up the new leaves
+  pthread_mutex_unlock(&ld->_mutex);
+  //Create the actual entries into the SQL local Database
   if (!new_leaves.empty()) {
     this->CreateNewEntry(new_leaves);
   }
-  pthread_mutex_unlock(&ld->_mutex);
   LOG(INFO) << "update_from_data_battery finished with max_seq_id " << max_seq_id;
   return max_seq_id;
 }

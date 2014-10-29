@@ -62,6 +62,7 @@ DEFINE_string(akamai_db_app,"ct",
 DEFINE_string(akamai_db_hostname,"", "Hostname of DataBattery");
 DEFINE_string(akamai_db_serv,"443",
               "Port or service for DataBattery");
+DEFINE_string(akamai_db_preface,"","Preface when GET, PUT access DB");
 DEFINE_string(akamai_db_cert,"", "Cert to use when accessing DataBattery");
 DEFINE_string(akamai_db_key,"", "Key to use when accessing DataBattery");
 DEFINE_string(akamai_db_request_bytes,"request_bytes","name of limit to get max entry value size");
@@ -115,7 +116,7 @@ namespace Akamai {
         //First DB instance
         DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
             FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key, FLAGS_akamai_sleep,
-            FLAGS_akamai_cert_check_delay);
+            FLAGS_akamai_cert_check_delay,FLAGS_akamai_db_preface);
         DataBattery* cnfg_db = new DataBattery(db_settings);
         CHECK(cnfg_db->is_good()) << "Failed to create DataBattery instance for cnfg_db";
         //Need to query databattery to get max size of a value in DB table and to get config, so use cnfg_db before
@@ -174,7 +175,7 @@ namespace Akamai {
         LOG(INFO) << "Get roots";
         DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
             FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,FLAGS_akamai_sleep,
-            FLAGS_akamai_cert_check_delay);
+            FLAGS_akamai_cert_check_delay,FLAGS_akamai_db_preface);
         DataBattery db(db_settings);
         CHECK(db.is_good()) << "Failed to create DataBattery instance for db";
         string data;
