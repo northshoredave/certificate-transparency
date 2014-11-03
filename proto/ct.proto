@@ -283,4 +283,7 @@ message AkamaiConfig {
   //What table to get root certs from and the key
   optional string db_root_table = 18 [ default = "leaves" ];
   optional string db_root_key = 19 [ default = "roots" ];
+  //How much to add to the serialized size of a lcpb when add to a lcpbl (there is bit of array overhead when 
+  //  it gets inserted into the list
+  optional uint32 buffer_safety = 20 [ default = 100 ];
 }

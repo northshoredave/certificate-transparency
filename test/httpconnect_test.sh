@@ -27,7 +27,7 @@ fi
 NUMCERTS=$4
 LOGOUTPUT=$5
 if [ $6 == "akamai" ]; then
-  AKAMAI="--akamai_run --akamai_db_cert=/home/dcurrie/MyStuff/AppBatteryCT/tmp/cert_db/dcurrie_testnet_kdc_ca.crt.pem --akamai_db_key=/home/dcurrie/MyStuff/AppBatteryCT/tmp/cert_db/dcurrie_testnet_kdc_ca.key.pem --akamai_db_hostname=api-prod.dbattery.sqa2.qa.akamai.com"
+  AKAMAI="--akamai_run --akamai_db_cert=/home/dcurrie/MyStuff/AppBatteryCT/tmp/cert_db/dcurrie_testnet_kdc_ca.crt.pem --akamai_db_key=/home/dcurrie/MyStuff/AppBatteryCT/tmp/cert_db/dcurrie_testnet_kdc_ca.key.pem --akamai_db_hostname=api-prod.dbattery.sqa2.qa.akamai.com --akamai_db_preface=/v1/apps/"
 else
   AKAMAI=""
 fi

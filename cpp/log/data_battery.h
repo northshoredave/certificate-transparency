@@ -303,6 +303,7 @@ namespace Akamai {
       uint64_t short_sleep() const { getLockMutex(_config.short_sleep,uint64_t); }
       uint32_t query_freq() const { getLockMutex(_config.query_freq,uint32_t); }
       uint32_t bucket_time() const { getLockMutex(_config.bucket_time,uint32_t); } 
+      uint32_t buffer_safety() const { getLockMutex(_config.buffer_safety,uint32_t); }
       std::vector<uint32_t> bucket_sets() const { getVLockMutex(_config.bucket_sets,uint32_t); }
       bool publish_cert_info() const { getLockMutex(_config.publish_cert_info,bool); }
       
@@ -453,8 +454,8 @@ namespace Akamai {
       //  maintaining the append only, never delete property.  
       void clear_pending(const std::set<std::string>& leaves_hash);
 
-      std::string get_leaves_table_name() const { return _cnfgd->db_leaves(); }
-      std::string get_pending_table_name() const { return _cnfgd->db_pending(); }
+      virtual std::string get_leaves_table_name() const { return _cnfgd->db_leaves(); }
+      virtual std::string get_pending_table_name() const { return _cnfgd->db_pending(); }
       std::string get_my_id() const { return _my_id; }
       void set_my_id(std::string id) { _my_id = id; }
       //Mutex protected data that we need to access for the get_all_leaves,pending_add,commit_pending and 
@@ -463,9 +464,9 @@ namespace Akamai {
       PendingData* get_pd() const { return _pd; }
       LeavesData* get_ld() const { return _ld; }
       HeartBeatData* get_hdb() const { return _hbd; }
-      ConfigData* get_cfngd() const { return _cnfgd; }
+      ConfigData* get_cnfgd() const { return _cnfgd; }
 
-      uint64_t get_max_entry_size() const { return _cnfgd->db_max_entry_size(); }
+      virtual uint64_t get_max_entry_size() const { return _cnfgd->db_max_entry_size(); }
       //Return what order you are in the list of peers
       int get_peer_order();
       //Get the current pending index and the last value in your virtual pending table.  We use this to minimize 
@@ -473,6 +474,13 @@ namespace Akamai {
       //  value, all we have to commit is the value.  No GETs are required.  If the value can't fit and we 
       //  need to add a new key, then we commit both value and index.
       void init_pending_data(PendingData* pd);
+      //Once you've figure out what pending certs to commit, this is the call that actually adds them to the leaves
+      //  table
+      bool add_leaves(ct::LoggedCertificatePBList& lcpbl, uint commit_delay);
+
+      //Gets all pending certs that have not yet been committed.  Used in the db_tool to grab a snapshot of the
+      //  pending certs.
+      void get_all_pending(ct::LoggedCertificatePBList& pending_lcpbl);
 
     private:
       //Retrieve the peers
@@ -494,9 +502,6 @@ namespace Akamai {
       //Retrieve the timestamp of the very last committed cert and the sequence id that was assigned to it
       bool get_last_committed(uint64_t& last_committed_timestamp,uint64_t& sequence_id,
           uint64_t& last_updated_timestamp); 
-      //Once you've figure out what pending certs to commit, this is the call that actually adds them to the leaves
-      //  table
-      bool add_leaves(ct::LoggedCertificatePBList& lcpbl, uint commit_delay);
 
     private:
       DataBattery* _db;

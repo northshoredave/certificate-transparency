@@ -578,23 +578,23 @@ bool CertTables::add_leaves(ct::LoggedCertificatePBList& lcpbl, uint commit_dela
   if (!get_last_leaves(index,last,last_key)) { return false; } 
   LOG(INFO) << "CT:al last leaf list is " << last.logged_certificate_pbs_size();
 
-  int remaining_size = get_max_entry_size()-last.ByteSize();
+  uint64_t max_size = get_max_entry_size();
+  uint32_t buff_safety = get_cnfgd()->buffer_safety();
   for (int i = 0; i < lcpbl.logged_certificate_pbs_size(); ++i) {
-    LOG(INFO) << "CT:al add pending leaf to i:" << i;
     const ct::LoggedCertificatePB& lcpb = lcpbl.logged_certificate_pbs(i);
+    LOG(INFO) << "CT:al add pending leaf to i:" << i << " size " << lcpb.ByteSize() << " max_size " << max_size;
+    LOG(INFO) << "CT:al last size " << last.ByteSize();
     //Check if you need to commit the key and start a new one
-    if (lcpb.ByteSize() > remaining_size) {
+    if (last.ByteSize() + (lcpb.ByteSize()+buff_safety) > max_size) {
       string tmp;
       last.SerializeToString(&tmp);
       if (!get_db()->PUT(get_leaves_table_name(),last_key,tmp)) { return false; }
       last.Clear();
-      remaining_size = get_max_entry_size();
       last_key = index.add_key();
       LOG(INFO) << "CT:al PUT leafs in leave table("<<last.logged_certificate_pbs_size() <<"), and get new key:" << last_key;
     }
     ct::LoggedCertificatePB* new_lcpb = last.add_logged_certificate_pbs();
     new_lcpb->CopyFrom(lcpb);
-    remaining_size -= lcpb.ByteSize();
   }
   //Commit last key that you added to
   string tmp;
@@ -752,6 +752,41 @@ bool CertTables::commit_pending(uint64_t min_age, uint64_t commit_delay) {
   return true;
 }
 
+void CertTables::get_all_pending(ct::LoggedCertificatePBList& pending_lcpbl) {
+  Peers p(_cnfgd->fixed_peer_delay(),_cnfgd->random_peer_delay(),_cnfgd->max_peer_age());
+  get_peers(p);
+  set<string> peers;
+  p.get_peer_set(peers);
+
+  uint64_t last_committed_timestamp, sequence_id, last_updated_timestamp;
+  get_last_committed(last_committed_timestamp,sequence_id,last_updated_timestamp); 
+
+  //Iterate over peers and get the keys
+  for (set<string>::const_iterator pIt = peers.begin(); pIt != peers.end(); ++pIt) {
+    LOG(INFO) << "CT:cp peer " << *pIt;
+    vector<string> keys;
+    if (!get_pending_peer_keys(*pIt,keys)) { return; }
+    //For each key, retrieve the data
+    for (vector<string>::const_iterator kIt = keys.begin(); kIt != keys.end(); ++kIt) {
+      ct::LoggedCertificatePBList lcpbl;
+      if (!get_key_data(get_pending_table_name(),*kIt,lcpbl)) { 
+        //This isn't fatal if the key was 0 and missing (might be an empty table)
+        if (get_db()->get_error_status() == 404 && zero_index(*pIt,*kIt)) { continue; } 
+      }
+      LOG(INFO) << "CT:cp peer:" << *pIt << " got key " << *kIt << " and lcpbl size " << lcpbl.logged_certificate_pbs_size();
+      //Pick out which guys you can commit
+      for (int i = 0; i < lcpbl.logged_certificate_pbs_size(); ++i) {
+        const ct::LoggedCertificatePB& lcpb = lcpbl.logged_certificate_pbs(i);
+        LOG(INFO) << "CT:cp i: " << i << " sct: " << lcpb.contents().sct().timestamp() << " last_commit: " << last_committed_timestamp;
+        if (lcpb.contents().sct().timestamp() > last_committed_timestamp) {
+          ct::LoggedCertificatePB* new_lcpb = pending_lcpbl.add_logged_certificate_pbs();
+          new_lcpb->CopyFrom(lcpb);
+        }
+      }
+    }
+  }
+}
+
 void CertTables::clear_pending(const set<string>& leaves_hash) { 
   LOG(INFO) << "CT:clrp clear_pending";
   vector<string> keys;
@@ -821,16 +856,21 @@ bool CertTables::pending_add(const ct::LoggedCertificatePB* lcpb) {
   LOG(INFO) << "CT:pa pending_add";
   uint64_t current_time = util::TimeInMilliseconds();
   //Comparing in ms, so must convert max_peer_age from seconds
-  uint64_t max_hb_age = get_hdb()->get_timestamp()*1000+0.5*_cnfgd->max_peer_age()*1000;
-  CHECK_LE(current_time,max_hb_age) 
+  if (get_hdb()) {
+    uint64_t max_hb_age = get_hdb()->get_timestamp()*1000+0.5*_cnfgd->max_peer_age()*1000;
+    CHECK_LE(current_time,max_hb_age) 
       << "CT:pa Your heartbeat hasn't updated recently, can't accept pending.";
+  } else {
+    LOG(INFO) << "No HB, must be db_tool";
+  }
   //Check if the current last entry can hold the new data, if not get the next key
   string key;
   pthread_mutex_lock(&get_pd()->_mutex);
   get_pd()->_pending_index.get_last_key(get_my_id(),key); 
   pthread_mutex_unlock(&get_pd()->_mutex);
   bool new_key(false);
-  if ((uint)(lcpb->ByteSize()+get_pd()->_last_pending_value.ByteSize()) >= get_max_entry_size()) {
+  if ((uint)((get_cnfgd()->buffer_safety()+lcpb->ByteSize()) +
+        get_pd()->_last_pending_value.ByteSize()) >= get_max_entry_size()) {
     //Modifying a shared data structure, so lock it.  Even though the clear method shouldn't modify the same
     //  attributes.  Only pending_index is accessed in 2 threads.  _last_pending_value is only modified in one
     //  thread.
@@ -905,6 +945,7 @@ bool CertTables::get_all_leaves(uint64_t from_key, string table_name, uint64_t m
       << " lcpbl size:" << lcpbl.logged_certificate_pbs_size();
     lcpbl.MergeFrom(tmp);
   }
+  LOG(INFO) << "Retrieved " << lcpbl.logged_certificate_pbs_size() << " leaves";
   return true;
 }
 

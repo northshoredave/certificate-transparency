@@ -52,10 +52,16 @@ DEFINE_bool(akamai_clear_peers,false,"Clear the peers");
 DEFINE_bool(akamai_yes_really_clear,false,"Failsafe so you have to set 2 flags to actually clear");
 DEFINE_bool(akamai_print_peers,false,"Get peers from DB and print it out");
 DEFINE_bool(akamai_print_config,false,"Get config from DB and print it out");
+DEFINE_string(akamai_read_config,"empty","Read config from file to get config settings");
 DEFINE_string(akamai_print_index,"empty","Print index from table.  Requires string index or pending");
 DEFINE_uint64(akamai_db_request_bytes,5242880,"size of DB max entry size");
 DEFINE_string(akamai_submit_root_ca,"empty","Give filename of roots ca to submit.  Carefull, this overwrites what's in the DB.  Only takes effect when CT restarts");
+DEFINE_string(akamai_dump_root_ca,"empty","Dumps out the root ca in entirety");
 DEFINE_bool(akamai_print_root_ca,false,"Print out subj of root ca");
+DEFINE_string(akamai_dump_leaves,"empty","Dump the leaves in serialized form to a file.  The file could then be read by another tool, or if we ever move to another database");
+DEFINE_string(akamai_read_leaves,"empty","Read leaves from file and load into DataBattery.");
+DEFINE_string(akamai_dump_pending,"empty","Dump the pending in serialized form to a file.  The file could then be read by another tool, or if we ever move to another database");
+DEFINE_string(akamai_read_pending,"empty","Read pending from file and load into DataBattery.");
 
 using namespace std;
 using namespace Akamai;
@@ -229,6 +235,99 @@ void print_root_ca(DataBattery* db) {
   }
 }
 
+void dump_root_ca(DataBattery* db) {
+  string data;
+  if (!db->GET(FLAGS_akamai_db_roots_table,FLAGS_akamai_db_roots_key,data)) {
+    LOG(INFO) << "Failed to get roots";
+  }
+  ct::X509Root roots;
+  if (!roots.ParseFromString(data)) {
+    LOG(INFO) << "Failed to parse roots";
+  }
+  ofstream ofs(FLAGS_akamai_dump_root_ca.c_str());
+  for (int i = 0; i < roots.roots_size(); ++i) {
+    ofs << roots.roots(i);
+  }
+  ofs.close();
+}
+
+void dump_leaves(DataBattery* db,ConfigData& cnfg) {
+  CertTables cert_tables(db,"id",NULL,NULL,NULL,&cnfg);
+  ct::LoggedCertificatePBList lcpbl;
+  uint64_t last_key;
+  cert_tables.get_all_leaves(0,FLAGS_akamai_db_leaves,FLAGS_akamai_db_request_bytes,
+      db,lcpbl,last_key);
+  LOG(INFO) << "Dumping " << lcpbl.logged_certificate_pbs_size() << " to file " << FLAGS_akamai_dump_leaves;
+  std::ofstream ofs(FLAGS_akamai_dump_leaves.c_str());
+  lcpbl.SerializeToOstream(&ofs);
+  ofs.close();
+}
+
+void read_leaves(DataBattery* db, ConfigData& cnfg) {
+  ct::LoggedCertificatePBList lcpbl;
+  ifstream ifs(FLAGS_akamai_read_leaves.c_str());
+  lcpbl.ParseFromIstream(&ifs);
+  LOG(INFO) << "Got " << lcpbl.logged_certificate_pbs_size() << " leaves from disk";
+  ifs.close();
+  //Clear out what's there
+  clear_leaves(db);
+  //Restore leaves from file
+  CertTables cert_tables(db,"id",NULL,NULL,NULL,&cnfg);
+  cert_tables.add_leaves(lcpbl,0);
+}
+
+void read_config(DataBattery* db, ct::AkamaiConfig* cnfg) {
+  std::ifstream ifs(FLAGS_akamai_read_config.c_str());
+  if (ifs.fail()) {
+    LOG(ERROR) << "Unable to open config file " << FLAGS_akamai_read_config;
+    return;
+  }
+  google::protobuf::io::IstreamInputStream* ifo = 
+    new google::protobuf::io::IstreamInputStream(&ifs);
+  if (!google::protobuf::TextFormat::Parse(ifo,cnfg)) {
+    LOG(ERROR) << "Failed to parse config file ";
+    return;
+  }
+  delete ifo;
+  ifs.close();
+}
+
+void dump_pending(DataBattery* db, ConfigData& cnfg) {
+  ct::LoggedCertificatePBList pending_lcpbl;
+  CertTables cert_tables(db,"id",NULL,NULL,NULL,&cnfg);
+  cert_tables.get_all_pending(pending_lcpbl);
+  LOG(INFO) << "Got " << pending_lcpbl.logged_certificate_pbs_size() << " pending certs";
+  std::ofstream ofs(FLAGS_akamai_dump_pending.c_str());
+  pending_lcpbl.SerializeToOstream(&ofs);
+  ofs.close();
+}
+
+void read_pending(DataBattery* db, ConfigData& cnfg) {
+  //Retrieve pending certs from file
+  std::ifstream ifs(FLAGS_akamai_read_pending.c_str());
+  if (ifs.fail()) {
+    LOG(ERROR) << "Unable to open pending file " << FLAGS_akamai_read_pending;
+    return;
+  }
+  ct::LoggedCertificatePBList pending_lcpbl;
+  pending_lcpbl.ParseFromIstream(&ifs);
+  ifs.close();
+
+  //Generate a uuid and add yourself to the peers
+  Peers p(cnfg.fixed_peer_delay(),cnfg.random_peer_delay(),cnfg.max_peer_age());
+  string id = Peers::randByteString(16); 
+  p.update_peer(id,db,FLAGS_akamai_db_pending);
+
+  //Now add all the pending to that peer
+  PendingData pd;
+  CertTables cert_tables(db,id,&pd,NULL,NULL,&cnfg);
+  cert_tables.init_pending_data(&pd);
+
+  for (uint i = 0; i < pending_lcpbl.logged_certificate_pbs_size(); ++i) {
+    cert_tables.pending_add(&pending_lcpbl.logged_certificate_pbs(i));
+  }
+}
+
 int main(int argc, char* argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
@@ -241,35 +340,35 @@ int main(int argc, char* argv[]) {
   DataBattery* db = new DataBattery(db_settings);
   CHECK(db->is_good()) << "Failed to create DataBattery instance for db";
 
-  if (FLAGS_akamai_print_peers) {
-    print_peers(db);
+  if (FLAGS_akamai_read_config == "empty" &&
+      (FLAGS_akamai_dump_leaves != "empty" ||
+       FLAGS_akamai_read_leaves != "empty")) {
+    LOG(ERROR) << "You must read config if you want to invoke dump_leaves or read_leaves";
+    return 0;
   }
-  if (FLAGS_akamai_print_config) {
-    print_config(db);
-  }
-  if (FLAGS_akamai_print_index == "pending") {
-    print_pending_indexes(db);
-  }
-  if (FLAGS_akamai_print_index == "leaves") {
-    print_index(db,FLAGS_akamai_db_leaves);
-  }
-
+  ct::AkamaiConfig cnfg;
+  if (FLAGS_akamai_read_config != "empty") { read_config(db,&cnfg); } 
+  ConfigData cnfg_data(cnfg);
+  if (FLAGS_akamai_print_peers) { print_peers(db); }
+  if (FLAGS_akamai_print_config) { print_config(db); }
+  if (FLAGS_akamai_print_index == "pending") { print_pending_indexes(db); }
+  if (FLAGS_akamai_print_index == "leaves") { print_index(db,FLAGS_akamai_db_leaves); }
   if (FLAGS_akamai_yes_really_clear) {
     if (FLAGS_akamai_clear_leaves) { clear_leaves(db); }
     if (FLAGS_akamai_clear_pending) { clear_all_pending(db); }
     if (FLAGS_akamai_clear_peers) { clear_peers(db); }
   }
-  if (FLAGS_akamai_clear_removed_peers) {
-    clear_removed_pending(db);
-  }
+  if (FLAGS_akamai_clear_removed_peers) { clear_removed_pending(db); }
+  if (FLAGS_akamai_submit_root_ca != "empty") { submit_root_ca(db,FLAGS_akamai_submit_root_ca); }
+  if (FLAGS_akamai_print_root_ca) { print_root_ca(db); }
+  if (FLAGS_akamai_dump_root_ca != "empty") { dump_root_ca(db); }
 
-  if (FLAGS_akamai_submit_root_ca != "empty") {
-    submit_root_ca(db,FLAGS_akamai_submit_root_ca);
-  }
-  if (FLAGS_akamai_print_root_ca) {
-    print_root_ca(db);
-  }
+  //These create certtables which owns db, so don't free again, just return
+  if (FLAGS_akamai_dump_leaves != "empty") { dump_leaves(db,cnfg_data); return 1; }
+  if (FLAGS_akamai_read_leaves != "empty") { read_leaves(db,cnfg_data); return 1; }
+  if (FLAGS_akamai_dump_pending != "empty") { dump_pending(db,cnfg_data); return 1; }
+  if (FLAGS_akamai_read_pending != "empty") { read_pending(db,cnfg_data); return 1; }
 
   delete db;
-  return 0;
+  return 1;
 }
