@@ -29,6 +29,9 @@
 #include "util/openssl_util.h"
 #include "log/data_battery.h"
 #include "util/openssl_thread_locks.h"
+#include "boost/date_time/posix_time/posix_time.hpp"
+#include "boost/date_time/local_time/local_time.hpp"
+#include "boost/filesystem.hpp"
 
 DEFINE_string(akamai_db_app,"ct",
              "App name used by databattery for CT");
@@ -63,8 +66,162 @@ DEFINE_string(akamai_read_leaves,"empty","Read leaves from file and load into Da
 DEFINE_string(akamai_dump_pending,"empty","Dump the pending in serialized form to a file.  The file could then be read by another tool, or if we ever move to another database");
 DEFINE_string(akamai_read_pending,"empty","Read pending from file and load into DataBattery.");
 
+//CHECKPOINTING options.  Almost a seperate tool, but let's keep it all fun in the family
+DEFINE_bool(run_checkpointer,false,"Go into checkpointing loop");
+DEFINE_string(dir_name,"checkpoint","What directory to store checkpoints in");
+DEFINE_uint64(max_num,1000,"Maximum number of checkpoints you can keep");
+DEFINE_uint64(max_space,1000000000,"Maximum amount of space checkpoints can occupy");
+DEFINE_uint64(max_age,604800,"Maximum age of a checkpoint");
+DEFINE_uint64(checkpoint_sleep_time,300,"Amount of time to sleep between checkpoints");
+
 using namespace std;
 using namespace Akamai;
+
+//Utilities:
+class checkPointer {
+  public:
+    checkPointer(string dir_name, string leaves, string pending, uint64_t max_num, uint64_t max_space, int max_age)
+      : _dir_name(dir_name)
+        , _leaves(leaves)
+        , _pending(pending)
+        , _max_num(max_num)
+        , _max_space(max_space)
+        , _max_age(max_age)
+  {}
+    void create_checkpoint();
+    void update_timestamp_file();
+  private:
+    void dir_manager(int force_remove);
+    void get_time_str(char* buffer, time_t* t = NULL);
+
+  private:
+    string _dir_name;
+    string _leaves;
+    string _pending;
+    uint64_t _max_num;
+    uint64_t _max_space;
+    uint64_t _max_age;
+};
+
+void checkPointer::create_checkpoint() {
+  char buffer[80]; get_time_str(buffer);
+  //Generate new name
+  string checkpoint = "checkpoint."+string(buffer)+".tar";
+
+  //Create tar cmd and execute
+  string cmd = "tar -C " + _dir_name + string(" -cf ") + _dir_name + checkpoint;
+  cmd += string(" ") + _leaves + string(" ") + _pending;
+
+  int retCode = system(cmd.c_str());
+  if (retCode) {
+    LOG(INFO) << "Failed checkpoint create";
+  }
+
+  cmd = "gzip " + _dir_name + checkpoint;
+  retCode = system(cmd.c_str());
+  if (retCode) {
+    LOG(INFO) << "Failed gzip of checkpoint";
+  }
+  LOG(INFO) << "Create checkpoint " << checkpoint;
+  dir_manager(0);
+  update_timestamp_file();
+}
+
+void checkPointer::update_timestamp_file() {
+  char buffer[80]; get_time_str(buffer);
+  string timestamp_file = _dir_name+"last_write.txt";
+  ofstream ofs(timestamp_file.c_str());
+  ofs << buffer;
+  ofs.close();
+}
+
+struct mngCmp {
+  bool operator()(const boost::filesystem::path& f1, 
+      const boost::filesystem::path& f2) {
+    return boost::filesystem::last_write_time(f1) > 
+      boost::filesystem::last_write_time(f2);
+  }
+};
+
+//Manages the files in a directory by removing any that exceed given limits
+//Limits are:
+//    max_num - maximum number of files in directory
+//    _max_space - maximum space in bytes that files can occupy
+//    _max_age - maximum age (in seconds).
+//    force_remove - remove X files, if possible
+//Files are removed in order of age (oldest first) until thresholds are met
+void checkPointer::dir_manager(int force_remove) {
+  namespace fs = boost::filesystem;
+  try {
+    fs::path mng_dir(_dir_name);
+    if (!fs::exists(mng_dir)||!fs::is_directory(mng_dir)) {
+      LOG(INFO) << "dirManager: dir not found " << mng_dir.string();
+    } else {
+      double usedSpace(0);
+      //Build up filelist in order of last_write_time
+      LOG(INFO) << "dirManager: build up file list";
+      vector<fs::path> mngFiles;
+      fs::directory_iterator end_iter;
+      for (fs::directory_iterator dir_itr(mng_dir); 
+          dir_itr != end_iter; ++dir_itr) {
+        if (fs::is_regular_file(dir_itr->status())) {
+          usedSpace += fs::file_size(dir_itr->path()); 
+          mngFiles.push_back(dir_itr->path());
+        }
+      }
+      LOG(INFO) << "dirManager: sort files by timestamp";
+      sort(mngFiles.begin(),mngFiles.end(),mngCmp());
+      bool removeFile(true);
+      double amountToRemove(0);
+      if (_max_space && usedSpace > _max_space) { amountToRemove = usedSpace - _max_space; }
+      LOG(INFO) << "dirManager: UsedSpace " << usedSpace << " _max_space " << _max_space << " amountToRem:"
+        << amountToRemove;
+      while (removeFile && !mngFiles.empty()) {
+        removeFile = false;
+        if (amountToRemove > 0) { 
+          amountToRemove -= fs::file_size(mngFiles.back());
+          removeFile = true;
+        } else if (_max_num && mngFiles.size() > _max_num) {
+          removeFile = true;
+        } else if (_max_age && 
+            fs::last_write_time(mngFiles.back())+_max_age < (uint)time(NULL)) {
+          removeFile = true;
+        } else if (force_remove > 0) {
+          removeFile = true;
+        }
+        if (removeFile) { 
+          if (!remove(mngFiles.back())) {
+            LOG(INFO) << "Failed to remove file " << mngFiles.back().filename();
+          } else {
+            LOG(INFO) << "Removed file " << mngFiles.back().filename();
+          }
+          mngFiles.pop_back(); 
+          if (force_remove > 0) { --force_remove; }
+        }
+      }
+    }
+  } catch (exception& e) {
+    LOG(INFO) << "Caught exception " << e.what();
+  } catch(...) {
+    LOG(INFO) << "Unknown exception";
+  }
+}
+
+//Generate a string with current date/time in human readable
+void checkPointer::get_time_str(char* buffer, time_t* t) {
+  //Generate current date/time
+  time_t* localT;
+  time_t tmp;
+  if (t) { 
+    localT = t; 
+  } else { 
+    localT = &tmp; 
+    time(localT);
+  } 
+  struct tm * timeinfo;
+  timeinfo = localtime(localT);
+  strftime(buffer,80,"%b_%d_%Y.%H.%M.%S",timeinfo);
+}
 
 void clear_leaves(DataBattery* db) {
   LOG(INFO) << "clear leaves";
@@ -251,16 +408,16 @@ void dump_root_ca(DataBattery* db) {
   ofs.close();
 }
 
-void dump_leaves(DataBattery* db,ConfigData& cnfg) {
-  CertTables cert_tables(db,"id",NULL,NULL,NULL,&cnfg);
+uint64_t dump_leaves(DataBattery* db, CertTables& cert_tables,string to_file) {
   ct::LoggedCertificatePBList lcpbl;
   uint64_t last_key;
   cert_tables.get_all_leaves(0,FLAGS_akamai_db_leaves,FLAGS_akamai_db_request_bytes,
       db,lcpbl,last_key);
-  LOG(INFO) << "Dumping " << lcpbl.logged_certificate_pbs_size() << " to file " << FLAGS_akamai_dump_leaves;
-  std::ofstream ofs(FLAGS_akamai_dump_leaves.c_str());
+  LOG(INFO) << "Dumping " << lcpbl.logged_certificate_pbs_size() << " to file " << to_file;
+  std::ofstream ofs(to_file.c_str());
   lcpbl.SerializeToOstream(&ofs);
   ofs.close();
+  return last_key;
 }
 
 void read_leaves(DataBattery* db, ConfigData& cnfg) {
@@ -292,14 +449,14 @@ void read_config(DataBattery* db, ct::AkamaiConfig* cnfg) {
   ifs.close();
 }
 
-void dump_pending(DataBattery* db, ConfigData& cnfg) {
+uint dump_pending(CertTables& cert_tables,string to_file) {
   ct::LoggedCertificatePBList pending_lcpbl;
-  CertTables cert_tables(db,"id",NULL,NULL,NULL,&cnfg);
   cert_tables.get_all_pending(pending_lcpbl);
   LOG(INFO) << "Got " << pending_lcpbl.logged_certificate_pbs_size() << " pending certs";
-  std::ofstream ofs(FLAGS_akamai_dump_pending.c_str());
+  std::ofstream ofs(to_file.c_str());
   pending_lcpbl.SerializeToOstream(&ofs);
   ofs.close();
+  return pending_lcpbl.logged_certificate_pbs_size();
 }
 
 void read_pending(DataBattery* db, ConfigData& cnfg) {
@@ -323,8 +480,34 @@ void read_pending(DataBattery* db, ConfigData& cnfg) {
   CertTables cert_tables(db,id,&pd,NULL,NULL,&cnfg);
   cert_tables.init_pending_data(&pd);
 
-  for (uint i = 0; i < pending_lcpbl.logged_certificate_pbs_size(); ++i) {
+  for (int i = 0; i < pending_lcpbl.logged_certificate_pbs_size(); ++i) {
     cert_tables.pending_add(&pending_lcpbl.logged_certificate_pbs(i));
+  }
+}
+
+void check_point_loop(DataBattery* db, ConfigData& cnfg) {
+  string leaves_pb = FLAGS_akamai_db_leaves+".pb";
+  string pending_pb = FLAGS_akamai_db_pending+".pb";
+  checkPointer cp(FLAGS_dir_name,leaves_pb,pending_pb,FLAGS_max_num,FLAGS_max_space,FLAGS_max_age);
+  LeavesData ld;
+  leaves_thread_data ltd(db,&ld,&cnfg);
+  CertTables cert_tables(db,"id",NULL,&ld,NULL,&cnfg);
+  while (true) {
+    uint num_of_leaves = ltd._ld->get_hash_size(); 
+    leaves_helper(&ltd);
+    std::ofstream ofs(string(FLAGS_dir_name+leaves_pb).c_str());
+    ld.get_leaves().SerializeToOstream(&ofs);
+    ofs.close();
+
+    uint num_of_pending = dump_pending(cert_tables,FLAGS_dir_name+pending_pb);
+    if ((num_of_leaves != ltd._ld->get_hash_size()) ||
+        (num_of_pending != 0)) {
+      cp.create_checkpoint();
+    } else {
+      LOG(INFO) << "Leaves unchanged and no pending, so skipping checkpoint";
+      cp.update_timestamp_file();
+    }
+    sleep(FLAGS_checkpoint_sleep_time);
   }
 }
 
@@ -336,7 +519,7 @@ int main(int argc, char* argv[]) {
   cert_trans::LoadCtExtensions();
 
   DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
-  FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,5,0,FLAGS_akamai_db_preface);
+    FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,5,0,FLAGS_akamai_db_preface);
   DataBattery* db = new DataBattery(db_settings);
   CHECK(db->is_good()) << "Failed to create DataBattery instance for db";
 
@@ -364,10 +547,17 @@ int main(int argc, char* argv[]) {
   if (FLAGS_akamai_dump_root_ca != "empty") { dump_root_ca(db); }
 
   //These create certtables which owns db, so don't free again, just return
-  if (FLAGS_akamai_dump_leaves != "empty") { dump_leaves(db,cnfg_data); return 1; }
+  if (FLAGS_akamai_dump_leaves != "empty") { 
+    CertTables cert_tables(db,"id",NULL,NULL,NULL,&cnfg_data);
+    dump_leaves(db,cert_tables,FLAGS_akamai_dump_leaves); return 1; 
+  }
   if (FLAGS_akamai_read_leaves != "empty") { read_leaves(db,cnfg_data); return 1; }
-  if (FLAGS_akamai_dump_pending != "empty") { dump_pending(db,cnfg_data); return 1; }
+  if (FLAGS_akamai_dump_pending != "empty") { 
+    CertTables cert_tables(db,"id",NULL,NULL,NULL,&cnfg_data);
+    dump_pending(cert_tables,FLAGS_akamai_dump_pending); return 1; 
+  }
   if (FLAGS_akamai_read_pending != "empty") { read_pending(db,cnfg_data); return 1; }
+  if (FLAGS_run_checkpointer) { check_point_loop(db,cnfg_data); return 1; }
 
   delete db;
   return 1;

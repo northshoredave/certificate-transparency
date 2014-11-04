@@ -407,6 +407,7 @@ namespace Akamai {
       void lock() { pthread_mutex_lock(&_mutex); }
       void unlock() { pthread_mutex_unlock(&_mutex); }
       const ct::LoggedCertificatePBList& get_leaves() const { return _leaves; }
+      uint get_hash_size() const { return _leaves_hash.size(); }
 
     public:
       std::set<std::string> _leaves_hash; //Kept around so we can check if we've already retrieved a leaf
