@@ -10,6 +10,14 @@
 #include <vector>
 
 namespace Akamai {
+  //Used to keep track of number of requests of a given type.  Each type has it's own HitCount.
+  //The way this works is that you have a list were the last one is the most current time slice.
+  //So imagine you have a time slice of 1 min.  Then each bucket records hits for a minute.  If
+  //you are allowing 15 buckets, then you are keeping 15 minutes worth of hits spread over 15 
+  //buckets/slices.
+  //      15min old -> 14 min old -> ... -> 1 min old
+  //Once the list is filled and you cross over into a new minute, pop the 15 min old slice and 
+  //everyone is effectively moved forward.
   class HitCount {
     public:
       HitCount(uint num_buckets)
@@ -17,17 +25,23 @@ namespace Akamai {
           , _cur_bucket(0)
           , _num_buckets_filled(0)
     {}
-      void incr() { ++_cur_bucket; } 
-      void rotate();
+      void incr() { ++_cur_bucket; } //Add a hit 
+      //Rotate means your moving the current time slices (buckets) forward and adding a new bucket.
+      //  If you've reach the max number of slices, then you can pop the front of the list, it's
+      //  too old.
+      void rotate(); 
       uint count(uint num_buckets) const;
 
     private:
-      uint _num_buckets; //How many window entries to keep
-      uint _cur_bucket;
-      std::list<uint> _buckets; //Hit count 
-      uint _num_buckets_filled;
+      uint _num_buckets; //How many time slices to keep
+      uint _cur_bucket; //The hit count in the current bucket
+      std::list<uint> _buckets; //hit counts.  Each bucket is a time slice, last is most current.
+      uint _num_buckets_filled; //How many time slices you have
   };
 
+  //Data struct to just tally up the buckets.  So if your bucket_time is 1 min, and you want stats
+  //  for 1, 5 and 15 minutes (given by the bucket_sets) then you return the 1 min bucket, 
+  //  1 min +..+ 5 min and 1 min +...+ 15 min buckets.
   struct ct_req_count_data_def {
     ct_req_count_data_def() 
       : _myid("")
@@ -39,6 +53,10 @@ namespace Akamai {
     std::map<std::string,std::vector<uint> > _request_to_counts;
   };
 
+  //Class to record hit counts of the various ct lookups given by the enum.  Uses hit counts class
+  //for each type and simply increments the appropriate hitCount.  
+  //  To add a new type, just add to the enum and update the str_to_req and req_to_str methods. 
+  //Query table will automatically get the new type.
   class RequestStats {
     public:
       typedef enum { GETENTRIES=0, GETROOTS, GETPRBYHS, GETSTH, GETSTHCNS, ADDCHAIN, ADDPRECHAIN, LAST } request_type; 
@@ -57,7 +75,7 @@ namespace Akamai {
         return _hit_counts[r].count(num_buckets); 
       }
       void process_hit(request_type r) { rotate(); process_hit_helper(r); }
-      void extract_data(ct_req_count_data_def& d);
+      void extract_data(ct_req_count_data_def& d); //Add up the buckets 
 
     private:
       void process_hit_helper(request_type r) { _hit_counts[r].incr(); }
@@ -66,10 +84,10 @@ namespace Akamai {
       std::string request_type_to_str(request_type t) const;
     private:
       std::string _myid;
-      uint _bucket_time;
-      time_t _last_rotate;
-      std::vector<uint32_t> _bucket_sets;
-      std::vector<HitCount> _hit_counts;
+      uint _bucket_time; //What time slice each bucket represents.
+      time_t _last_rotate; //When you last rotated.
+      std::vector<uint32_t> _bucket_sets; //How you want to accumulate the buckets.
+      std::vector<HitCount> _hit_counts; //Actual hit counts
   };
 
   struct ct_main_data_def {
@@ -119,17 +137,23 @@ namespace Akamai {
     std::vector<info> _info;
   };
 
-  //Meant to capture all things akamai query.  For now I'm going to got the tableprov route which means I write out
-  //a index and tables in .csv file and register with tableprov via the hostsetup script to read and publish those
-  //tables.  However, I'm going to use the query2 structs so that I can easily switch to the programmatic interface
-  //if I want to in the future.
+  //Meant to capture all things akamai query.  For now I'm going to go the tableprov route which means I write out
+  //an index and tables in .csv file.  AppBattery will pick them up and publishes via tableprov.
+  //However, I'm going to use the query2 structs so that I can easily switch to the programmatic 
+  //interface if we ever move off AppBattery and want to us it in the future.
   class query_interface {
     public:
+      //Update a main table that has basic stats on ct instance
       void update_main(const ct_main_data_def* d);
+      //Whats in the config (stored in DataBattery)
       void update_config(const ct_config_data_def* d);
+      //Update timestamps one when things have last happened (commit,leaves update, peer updated...)
       void update_stats(const ct_stats_data_def* d);
+      //Update hit counts
       void update_req_count();
+      //Publish some data on all the certs in CT.  Can be disabled by config.
       void update_cert_info(const ct_cert_info_data_def* d);
+      //Update the tables
       bool update_tables() { update_table_data(); return update_tables_on_disk(); } 
       //Make query interface a singleton so I can get at if from deep in ct code to update stats, etc
       static query_interface* instance();
