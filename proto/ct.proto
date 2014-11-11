@@ -257,33 +257,37 @@ message AkamaiConfig {
   //Random wait time in seconds added to fixed time to verify that peer update was successfull
   optional uint64 random_peer_delay = 5 [ default = 3 ];
   //Maximum age in seconds of peers last update before it is removed
-  optional uint64 max_peer_age = 6 [ default = 20 ];
+  optional uint64 max_peer_age_removal = 6 [ default = 86400 ];
+  //Max age in seconds of last peer update before you should stop answering queries
+  optional uint64 max_peer_age_suspension = 7 [ default = 600 ];
   //How often to beat.  I.e. how often to update your peer timestamp
-  optional uint64 heartbeat_freq = 7 [ default = 10 ];
+  optional uint64 heartbeat_freq = 8 [ default = 10 ];
   //How often to update the leaves from DataBattery
-  optional uint64 leaves_update_freq = 8 [ default = 20 ];
+  optional uint64 leaves_update_freq = 9 [ default = 20 ];
   //Minimum age of pending cert in seconds before it can be committed to the leaves table
-  optional uint64 cert_min_age = 9 [ default = 10 ];
+  optional uint64 cert_min_age = 10 [ default = 10 ];
   //How often to try and commit pending certs (in seconds).  Added to the peer delay.
-  optional uint64 commit_delay = 10 [ default = 10 ];
+  optional uint64 commit_delay = 11 [ default = 10 ];
   //Delay added to commit delay (in seconds).  Determines how long to wait between committing pending certs
-  optional uint64 commit_peer_delay = 11 [default = 10 ];
+  optional uint64 commit_peer_delay = 12 [default = 10 ];
   //How often to check for new config
-  optional uint64 config_delay = 12 [ default = 30 ];
+  optional uint64 config_delay = 13 [ default = 30 ];
   //How long to sleep in threads when some error occurs before trying again
-  optional uint64 short_sleep = 13 [ default = 5 ];
+  optional uint64 short_sleep = 14 [ default = 5 ];
   //How often to update query tables
-  optional uint32 query_freq = 14 [ default = 180 ];
+  optional uint32 query_freq = 15 [ default = 180 ];
   //How much time a bucket spans for req_counts in seconds
-  optional uint32 bucket_time = 15 [ default = 300 ];
+  optional uint32 bucket_time = 16 [ default = 300 ];
   //What the bucket sizes to report. 
-  repeated uint32 bucket_sets = 16;
+  repeated uint32 bucket_sets = 17;
   //Whether to publish cert_info query table
-  optional bool publish_cert_info = 17;
+  optional bool publish_cert_info = 18;
   //What table to get root certs from and the key
-  optional string db_root_table = 18 [ default = "leaves" ];
-  optional string db_root_key = 19 [ default = "roots" ];
+  optional string db_root_table = 19 [ default = "leaves" ];
+  optional string db_root_key = 20 [ default = "roots" ];
   //How much to add to the serialized size of a lcpb when add to a lcpbl (there is bit of array overhead when 
   //  it gets inserted into the list
-  optional uint32 buffer_safety = 20 [ default = 100 ];
+  optional uint32 buffer_safety = 21 [ default = 100 ];
+  //How often to check health in main thread
+  optional uint32 health_check_freq = 22 [ default = 15 ];
 }

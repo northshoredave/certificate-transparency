@@ -12,6 +12,7 @@ static q2_column_description ct_main_columns[] = {
   {"now",      "current time",  Q2_TIME,   Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
   {"start",    "start time",    Q2_TIME,   Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
   {"root_hash","root hash",Q2_STRING, Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
+  {"health", "health or not", Q2_INT, Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
   Q2_END_COLUMN
 };
 
@@ -27,11 +28,14 @@ void main_callback(std::ofstream& ofs,const void* user_arg) {
   LOG(INFO) << "Main callback";
   const ct_main_data_def* args = (const ct_main_data_def *)user_arg;
   time_t current_time = time(0);
+  int is_main_ok = 0;
+  if (args->_is_main_ok) { is_main_ok = 1; }
 
   ofs << args->_myid << ","
       << current_time << ","
       << args->_start_time << ","
-      << args->_root_hash << endl;
+      << args->_root_hash << ","
+      << is_main_ok << endl;
 }
 
 /******* End Main Table *********/

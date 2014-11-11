@@ -92,11 +92,12 @@ namespace Akamai {
 
   struct ct_main_data_def {
     ct_main_data_def()
-      : _myid(""), _start_time(0)
+      : _myid(""), _start_time(0), _is_main_ok(true)
     {}
     std::string _myid;
     time_t _start_time;
     std::string _root_hash;
+    bool _is_main_ok;
   };
 
   struct ct_config_data_def {
@@ -169,6 +170,9 @@ namespace Akamai {
       ct_config_data_def* get_config_data() { return _config_data; }
       ct_stats_data_def* get_stats_data() { return _stats_data; }
       ct_cert_info_data_def* get_cert_info_data() { return _cert_info_data; }
+
+      bool is_main_ok() const { return _main_data->_is_main_ok; }
+      void set_is_main_ok(bool b) { _main_data->_is_main_ok = b; }
 
     private:
       query_interface(std::string tableprov_directory,std::string myid) 

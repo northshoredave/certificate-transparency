@@ -526,6 +526,7 @@ TEST_F(QueryTest,QueryTables) {
   string contents = read_file(_query_dir+string("/appbatt_app_ct_main.csv"));
   ASSERT_NE("false",contents);
   ASSERT_TRUE(contents.find("500,imustbeexactlythirtytwobyteslong")!= string::npos);
+  ASSERT_TRUE(contents.find(",1")!= string::npos);
 
   contents = read_file(_query_dir+string("/appbatt_app_ct_cert_info.csv"));
   ASSERT_NE("false",contents);
@@ -560,7 +561,7 @@ class CertTablesTest : public ::testing::Test {
       test_config.set_db_max_entry_size(7000);
       test_config.set_fixed_peer_delay(0);
       test_config.set_random_peer_delay(0);
-      test_config.set_max_peer_age(3600000);
+      test_config.set_max_peer_age_removal(3600000);
       test_config.set_db_leaves("test_leaves");
       test_config.set_db_pending("test_pending");
       test_config.set_leaves_update_freq(0);
@@ -586,7 +587,7 @@ class CertTablesTest : public ::testing::Test {
         _cert_tablesv.back()->init_pending_data(_pdv.back());
         //Insert new committer into peers
         Peers p(_cnfgdv.back()->fixed_peer_delay(),_cnfgdv.back()->random_peer_delay(),
-            _cnfgdv.back()->max_peer_age());
+            _cnfgdv.back()->max_peer_age_removal());
         p.update_peer(_cert_tablesv.back()->get_my_id(),_cert_tablesv.back()->get_db(),
             _cert_tablesv.back()->get_pending_table_name());
       }

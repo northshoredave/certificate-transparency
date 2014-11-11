@@ -471,7 +471,7 @@ void read_pending(DataBattery* db, ConfigData& cnfg) {
   ifs.close();
 
   //Generate a uuid and add yourself to the peers
-  Peers p(cnfg.fixed_peer_delay(),cnfg.random_peer_delay(),cnfg.max_peer_age());
+  Peers p(cnfg.fixed_peer_delay(),cnfg.random_peer_delay(),cnfg.max_peer_age_removal());
   string id = Peers::randByteString(16); 
   p.update_peer(id,db,FLAGS_akamai_db_pending);
 

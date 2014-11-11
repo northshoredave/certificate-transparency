@@ -90,6 +90,9 @@ void Peers::get_removed_peer_set(set<string>& peers,uint age) const {
   }
 }
 
+//Note that we keep track of what peers are removed.  In the loop we maintain two lists 
+//  1) peers:  list of peers which are still alive
+//  2) removed_peers: list of peers which have been declaredy dead  
 void Peers::remove_dead_peers(uint64_t max_age) {
   //Don't see a way to delete from a list in protobuf so just build up a new object and copy it over to the
   //  permanent one.
@@ -183,7 +186,7 @@ bool Peers::update_peer(string id, DataBattery* db, string tablename) {
   }
     
   //remove any dead peers while your at it
-  remove_dead_peers(_max_age);
+  remove_dead_peers(_max_age_removal);
 
   uint64_t current_time = get_time();
   //Now go into loop checking if your in peers with correct timestamp, if not, then add/update and wait.
@@ -208,8 +211,7 @@ bool Peers::update_peer(string id, DataBattery* db, string tablename) {
   return true;
 }
 
-//I'm going to assume that any table I have has an index by construction.  If it's missing then someone deleted
-//my table or something, and that's bad and stop worthy
+//If index is simply missing add it, otherwise return failure
 bool DataBattery::get_index(string table, string index_key, DBIndex& index) {
   string data;
   if (!GET(table,index_key,data)) { 
@@ -405,16 +407,17 @@ bool DataBattery::GET_key_from_table(string table, string key, uint64_t max_entr
 bool DataBattery::GET_keys_from_table(string table,const vector<string>& keys, uint64_t max_entry_size,
     vector<string>& data) {
   data.clear();
-  data.reserve(keys.size());
-  for (vector<string>::const_iterator k = keys.begin(); k != keys.end(); ++k) {
-    string value;
-    value.reserve(max_entry_size);
-    if (!GET(table,*k,value)) {
+  data.resize(keys.size());
+  int index(0);
+  for (vector<string>::const_iterator k = keys.begin(); k != keys.end(); ++k, ++index) {
+    data[index].reserve(max_entry_size);
+    if (!GET(table,*k,data[index])) {
+      data.clear(); //Invalidate everything if you fail to get an expected key, something is corrupted
+      //If you failed to get any keys and there is only one key, then it may be ok because it's an empty table
       if (k == keys.begin()) { LOG(INFO) << "Table is empty"; return true; }
       LOG(ERROR) << "DB: Failed to get key " << *k << " from table " << table;
       return false;
     }
-    data.push_back(value);
   }
   return true;
 }
@@ -525,7 +528,7 @@ bool CertTables::get_last_leaves(DBIndex& index, ct::LoggedCertificatePBList& le
 }
 
 int CertTables::get_peer_order() {
-  Peers p(_cnfgd->fixed_peer_delay(),_cnfgd->random_peer_delay(),_cnfgd->max_peer_age());
+  Peers p(_cnfgd->fixed_peer_delay(),_cnfgd->random_peer_delay(),_cnfgd->max_peer_age_removal());
 
   if (!get_peers(p)) { return -1; }
   return p.get_order(get_my_id());
@@ -621,6 +624,7 @@ struct SCTSort {
   }
 };
 
+//Remember index is uuid.<index>, and prefix here should be uuid + 1 for '.'
 static bool zero_index(string prefix, string index) {
   if (prefix.length()+1 > index.length()) { return false; }
   string tmp = index.substr(prefix.length()+1);
@@ -679,7 +683,7 @@ void CertTables::init_pending_data(PendingData* pd) {
  * commit_delay seconds.
  */
 bool CertTables::commit_pending(uint64_t min_age, uint64_t commit_delay) {
-  Peers p(_cnfgd->fixed_peer_delay(),_cnfgd->random_peer_delay(),_cnfgd->max_peer_age());
+  Peers p(_cnfgd->fixed_peer_delay(),_cnfgd->random_peer_delay(),_cnfgd->max_peer_age_removal());
   //Get the peers
   if (!get_peers(p)) { return false; }
   set<string> peers;
@@ -753,7 +757,7 @@ bool CertTables::commit_pending(uint64_t min_age, uint64_t commit_delay) {
 }
 
 void CertTables::get_all_pending(ct::LoggedCertificatePBList& pending_lcpbl) {
-  Peers p(_cnfgd->fixed_peer_delay(),_cnfgd->random_peer_delay(),_cnfgd->max_peer_age());
+  Peers p(_cnfgd->fixed_peer_delay(),_cnfgd->random_peer_delay(),_cnfgd->max_peer_age_removal());
   get_peers(p);
   set<string> peers;
   p.get_peer_set(peers);
@@ -791,6 +795,7 @@ void CertTables::clear_pending(const set<string>& leaves_hash) {
   LOG(INFO) << "CT:clrp clear_pending";
   vector<string> keys;
   uint64_t pending_first_key, pending_last_key;
+  //Must lock because this data is accessed by the commit thread and main thread (when adding a cert)
   pthread_mutex_lock(&get_pd()->_mutex);
   get_pd()->_pending_index.get_all_keys(get_my_id(),keys);
   pending_first_key = get_pd()->_pending_index.first_key();
@@ -852,14 +857,16 @@ bool CertTables::get_pending_peer_keys(string peer, vector<string>& keys) {
   return true;
 }
 
+//Called from CreatePendingEntry_ in our Databattery_db before call to add to local sqlite db is made.
 bool CertTables::pending_add(const ct::LoggedCertificatePB* lcpb) {
   LOG(INFO) << "CT:pa pending_add";
   uint64_t current_time = util::TimeInMilliseconds();
+  //Make sure your peer timestamp has been updated recently enough
   //Comparing in ms, so must convert max_peer_age from seconds
-  if (get_hdb()) {
-    uint64_t max_hb_age = get_hdb()->get_timestamp()*1000+0.5*_cnfgd->max_peer_age()*1000;
-    CHECK_LE(current_time,max_hb_age) 
-      << "CT:pa Your heartbeat hasn't updated recently, can't accept pending.";
+  if (get_hbd()) {
+    uint64_t max_hb_age = get_hbd()->get_timestamp()*1000+_cnfgd->max_peer_age_suspension()*1000;
+    LOG(INFO) << "CT:pa Your heartbeat hasn't updated recently, can't accept pending.";
+    if (current_time > max_hb_age) { return false; }
   } else {
     LOG(INFO) << "No HB, must be db_tool";
   }
@@ -953,9 +960,11 @@ bool CertTables::get_all_leaves(uint64_t from_key, string table_name, uint64_t m
  * it reaches such a combination.  State machine ignores single \r or \n.  Everything else is just gathered up
  * into a single line for processing when the \r\n is reached.
  *The header itself is terminated by \r\n\r\n, so that combination terminates processing of the header.
+ *
+ * Note that this method requires that len == n and that lenght of *start is len.
  */
 bool ScanHeader::process_header(int n, char** start, int& len) {
-  //You could just reserver len, which would be exact, but it's slower.  So just reserve a reasonable size.
+  //You could just reserve len, which would be exact, but it's slower.  So just reserve a reasonable size.
   _line.reserve(500);
   for (int i = 0; i < n; ++i) {
     switch(_state) {
@@ -997,7 +1006,8 @@ bool ScanHeader::process_header(int n, char** start, int& len) {
  *  the size of the returned data).
  */
 bool ScanHeader::process_status(string line) {
-  char version[100]; 
+  //Version can't possibly be longer then the entire string 
+  char version[line.size()]; 
   if (sscanf(line.c_str(),"%s %d",version,&_status) != 2) { return false; }
   _foundStatus = true;
   if (_status != _success) { LOG(WARNING) << "Got status " << _status; return false; }
@@ -1054,7 +1064,7 @@ void* HeartBeat(void* arg) {
     sleep(sleep_time);
     LOG(INFO) << "HB: thread wakeup";
     Peers p(hbtd->_cnfgd->fixed_peer_delay(),hbtd->_cnfgd->random_peer_delay(),
-        hbtd->_cnfgd->max_peer_age());
+        hbtd->_cnfgd->max_peer_age_removal());
     if (!p.update_peer(hbtd->_my_id,hbtd->_db,hbtd->_cnfgd->db_pending())) {
       LOG(WARNING) << "HB: Failed to update peer timestamp for id " << hbtd->_my_id;
       sleep_time = hbtd->_cnfgd->short_sleep(); //Sleep for a short time and try again
@@ -1072,7 +1082,7 @@ bool Akamai::create_heartbeat_thread(heartbeat_thread_data* hbtd) {
   //Before starting the thread add the peer to list by calling update_peer.  Doing this outside of thread
   //  so that we block on it for the first add.
   Peers p(hbtd->_cnfgd->fixed_peer_delay(),hbtd->_cnfgd->random_peer_delay(),
-      hbtd->_cnfgd->max_peer_age());
+      hbtd->_cnfgd->max_peer_age_removal());
   if (!p.update_peer(hbtd->_my_id,hbtd->_db,hbtd->_cnfgd->db_pending())) {
     LOG(ERROR) << "HB: Failed to add peer";
     return false;

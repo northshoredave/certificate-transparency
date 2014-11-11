@@ -153,7 +153,7 @@ namespace Akamai {
         }
         //End of hearbeat thread
         
-        //Create leaves thread data but don't start until after SQLiteDB created
+        //Create leaves thread data
         DataBattery* ld_db = new DataBattery(db_settings);
         CHECK(ld_db->is_good()) << "Failed to create DataBattery instance for ld_db";
         _ltd = new leaves_thread_data(ld_db,&_ld,&_cnfgd);  
@@ -169,6 +169,7 @@ namespace Akamai {
           CHECK(create_commit_thread(_ctd));
         }
         LOG(INFO) << "Completed intialization";
+        //End of commit thread
       }
 
       void get_roots() {
@@ -212,6 +213,30 @@ namespace Akamai {
         t->_peers_time = _hbd.get_timestamp();
         if (_ctd) { t->_commit_time = _ctd->get_timestamp(); }
         t->_config_time = _cnfgd.get_timestamp();
+      }
+      bool is_ok() {
+        uint64_t current_time = util::TimeInMilliseconds();
+        uint64_t max_hb_age = 1000*(_hbd.get_timestamp() + _cnfgd.max_peer_age_suspension());
+        if (current_time > max_hb_age) {
+          LOG(INFO) << "Main: heartbeat hasn't been updated recently ct:" << current_time << " ha:" << max_hb_age;
+          return false;
+        }
+        uint64_t max_leaves_age = 1000*(_ld.get_timestamp() + 2*_cnfgd.leaves_update_freq());
+        if (current_time > max_leaves_age) {
+          LOG(INFO) << "Main: leaves haven't been updated recently ct:" << current_time << " la:" << max_leaves_age;
+          return false;
+        }
+        //Should always both be true or neither
+        if (_ctd&&_commit_cert_tables) {
+          uint64_t peer_delay = _commit_cert_tables->get_peer_order()*_cnfgd.commit_peer_delay();
+          //Need to account for fixed commit delay as well as commit_peer_delay
+          uint64_t max_commit_age = 1000*(_ctd->get_timestamp() + 2*(_cnfgd.commit_delay()+peer_delay));
+          if (current_time > max_commit_age) {
+            LOG(INFO) << "Main: commit hasn't been done recently ct:" << current_time << " ca:" << max_commit_age;
+            return false;
+          }
+        }
+        return true;
       }
       void get_config_data(ct_config_data_def* d) {
         _cnfgd.gen_key_values(d->_config_key_value);
@@ -379,6 +404,11 @@ void AkamaiQueryEvent(Akamai::main_setup* main_data,
   CHECK(Akamai::query_interface::instance()->update_tables());
 }
 
+void AkamaiHealthCheck(Akamai::main_setup* main_data) {
+  LOG(INFO) << "Run health check";
+  Akamai::query_interface::instance()->set_is_main_ok(main_data->is_ok());
+}
+
 int main(int argc, char* argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
@@ -462,11 +492,16 @@ int main(int argc, char* argv[]) {
                                           &log_lookup, FLAGS_akamai_run));
 
   PeriodicCallback* akamai_query_event(NULL);
+  PeriodicCallback* akamai_health_check_event(NULL);
   if (FLAGS_akamai_run) {
     LOG(INFO) << "Create akamai query event " << akamai->get_config().query_freq();
     akamai_query_event = new PeriodicCallback(
         event_base, akamai->get_config().query_freq(), 
         boost::bind(&AkamaiQueryEvent,akamai,&log_lookup));
+    LOG(INFO) << "Create akamai health check event " << akamai->get_config().health_check_freq();
+    akamai_health_check_event = new PeriodicCallback(
+        event_base, akamai->get_config().health_check_freq(),
+        boost::bind(&AkamaiHealthCheck,akamai));
   }
 
   libevent::HttpServer server(*event_base);
@@ -482,6 +517,7 @@ int main(int argc, char* argv[]) {
   event_base->Dispatch();
   if (akamai) { delete akamai; }
   if (akamai_query_event) { delete akamai_query_event; }
+  if (akamai_health_check_event) { delete akamai_health_check_event; }
 
   return 0;
 }

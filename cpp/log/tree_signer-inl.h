@@ -64,8 +64,8 @@ TreeSigner<Logged>::UpdateTree(bool run_akamai) {
   // Timestamps have to be unique.
   uint64_t min_timestamp(0);
   if (run_akamai) {
-    //Now update the local database from the DataBattery leaves. Since they are in order of sequence ID, 
-    //  you can begin your scan from the tree_size.
+    //Now update the local database from the DataBattery leaves. Since they are in order of 
+    //  sequence ID, you can begin your scan from the tree_size.
     int max_seq_id = db_->update_from_data_battery(sth.tree_size());
 
     min_timestamp = LastUpdateTime() + 1;

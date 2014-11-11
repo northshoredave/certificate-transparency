@@ -56,8 +56,8 @@ namespace Akamai {
   };
 
   /*DB doesn't provide a secondary index for tables, just key/value pairs.  As such we must maintain our
-   * index for packing data into a given value and for determining what all the keys are for the table if 
-   * we should need to retrieve the complete table.  This is the class for doing that bookeeping.
+   * index for packing data into a given value and for determining what all the keys are for the table. 
+   * If we should need to retrieve the complete table.  This is the class for doing that bookeeping.
    *    It's optimized for our specific purpose.  That being:
    *       1) We will never modify a full (key,value) pair.
    *       2) New additions always occur in the last (key,value) pair if it has sufficient space, or a new 
@@ -88,20 +88,20 @@ namespace Akamai {
         if (key < first_key()) { generate_keys(first_key(),last_key(),keys); }
         else { generate_keys(key,last_key(),keys); }
       }
-      //Return all integers between first and last as strings with prefix appended
-      void get_all_keys(std::string prefix, std::vector<std::string>& keys) const {
-        std::string tmp = prefix+std::string("."); generate_keys(tmp,first_key(),last_key(),keys); 
-      }
-      void get_all_keys_from_zero(std::string prefix, std::vector<std::string>& keys) const {
-        std::string tmp = prefix+std::string("."); generate_keys(tmp,0,last_key(),keys);
-      }
-      //Same as get_all_keys, but starting from a given key instead of first_key
+      //get all keys starting from a given key
       void get_all_keys_from_key(std::string prefix, uint64_t key, std::vector<std::string>& keys) const {
         std::string tmp = prefix+std::string(".");
-        if (key < first_key()) { generate_keys(tmp,first_key(),last_key(),keys); }
-        else { generate_keys(tmp, key, last_key(),keys); }
+        generate_keys(tmp, key, last_key(),keys);
       }
-      //Get the last key of the index.  Use existing generate_keys call to do it.
+      //Return all integers between first and last as strings with prefix appended
+      void get_all_keys(std::string prefix, std::vector<std::string>& keys) const {
+        get_all_keys_from_key(prefix,first_key(),keys);
+      }
+      void get_all_keys_from_zero(std::string prefix, std::vector<std::string>& keys) const {
+        get_all_keys_from_key(prefix,0,keys);
+      }
+      //Get the last key of the index.  Use existing generate_keys call to do it.  Index will always have at 
+      // least one key by construction (0).
       void get_last_key(std::string& key) const { 
         std::vector<std::string> keys;
         generate_keys(last_key(),last_key(),keys); 
@@ -129,7 +129,7 @@ namespace Akamai {
       const ct::DataBatteryIndex& get_msg() const { return _dbIndex; }
 
     private:
-      //Includes all key between from and to including both from and to
+      //Includes all key between from and to including both from and to.
       void generate_keys(uint64_t from, uint64_t to, std::vector<std::string>& keys) const;
       //Same as above, but add prefix to key
       void generate_keys(std::string prefix, uint64_t from, uint64_t to, std::vector<std::string>& keys) const;
@@ -147,6 +147,8 @@ namespace Akamai {
    *   serv: service or port to contact DB on
    *   cert: cert to use when talking to databattery
    *   key:  private key to use when talking to databattery
+   *   key_sleep: if cert/key is missing, this is how long to sleep before trying again (should be just startup)
+   *   cert_key_check_delay: how often to check if a new cert/key has arrived (database cert/key) 
    * Using the seperate settings class so that I can pass the same settings into multiple instances of DataBattery
    * and be sure I got them the same.  Easier to have multiple DB instances and rely on openSSL locking, then
    * make all this code be thread safe.
@@ -216,6 +218,10 @@ namespace Akamai {
       static int _maxline;
   };
 
+  //Used as a locking class with a timestamp.  Used by all of the shared data from various threads and the parent
+  //  thread.
+  //Note that the timestamp is in seconds while milliseconds is used for other purposes (because open source ct
+  //  code uses milliseconds).  Be careful if you compare.
   class Timestamp {
     public:
       Timestamp() 
@@ -236,12 +242,15 @@ namespace Akamai {
         pthread_mutex_unlock(&_mutex);
         return time;
       }
-
+      void lock() const { pthread_mutex_lock(&_mutex); }
+      void unlock() const { pthread_mutex_unlock(&_mutex); }
       mutable pthread_mutex_t _mutex;
     private:
-      time_t _timestamp;
+      time_t _timestamp; //In seconds
   };
 
+  //Wrapper for the protobuf define config data message.  Provides macros for doing locking when retrieving 
+  //  values from the message.
   class ConfigData:public Timestamp {
     public:
       ConfigData() {}
@@ -293,7 +302,8 @@ namespace Akamai {
       std::string db_root_key() const { getLockMutex(_config.db_root_key,std::string); }
       uint64_t fixed_peer_delay() const { getLockMutex(_config.fixed_peer_delay,uint64_t); }
       uint64_t random_peer_delay() const { getLockMutex(_config.random_peer_delay,uint64_t); } 
-      uint64_t max_peer_age() const { getLockMutex(_config.max_peer_age,uint64_t); } 
+      uint64_t max_peer_age_removal() const { getLockMutex(_config.max_peer_age_removal,uint64_t); } 
+      uint64_t max_peer_age_suspension() const { getLockMutex(_config.max_peer_age_suspension,uint64_t); } 
       uint64_t heartbeat_freq() const { getLockMutex(_config.heartbeat_freq,uint64_t); } 
       uint64_t leaves_update_freq() const { getLockMutex(_config.leaves_update_freq,uint64_t); } 
       uint64_t cert_min_age() const { getLockMutex(_config.cert_min_age,uint64_t); } 
@@ -302,6 +312,7 @@ namespace Akamai {
       uint64_t config_delay() const { getLockMutex(_config.config_delay,uint64_t); }
       uint64_t short_sleep() const { getLockMutex(_config.short_sleep,uint64_t); }
       uint32_t query_freq() const { getLockMutex(_config.query_freq,uint32_t); }
+      uint32_t health_check_freq() const { getLockMutex(_config.health_check_freq,uint32_t); }
       uint32_t bucket_time() const { getLockMutex(_config.bucket_time,uint32_t); } 
       uint32_t buffer_safety() const { getLockMutex(_config.buffer_safety,uint32_t); }
       std::vector<uint32_t> bucket_sets() const { getVLockMutex(_config.bucket_sets,uint32_t); }
@@ -323,17 +334,17 @@ namespace Akamai {
    *     in the peers in DataBattery
    *  static uint _random_peer_delay: An additional random delay in seconds that is added to the fixed delay to
    *     wait before checking if peers got updated in DataBattery
-   *  static uint _max_age: In milliseconds (set converts seconds to milliseconds) before peer is removed.
+   *  static uint _max_age_removal: In milliseconds (set converts seconds to milliseconds) before peer is removed.
    *
    *    DataBatteryPeers is a google protobuf.  Look at proto/ct.proto for class definition and member data.
    */
 
   class Peers {
     public:
-      Peers(uint fixed_peer_delay, uint random_peer_delay, uint max_age) 
+      Peers(uint fixed_peer_delay, uint random_peer_delay, uint max_age_removal) 
         : _fixed_peer_delay(fixed_peer_delay)
         , _random_peer_delay(random_peer_delay)
-        , _max_age(max_age*1000)
+        , _max_age_removal(max_age_removal*1000)
       {}
       //Protobuf calls
       bool parse_from_string(std::string data) { return _peers.ParseFromString(data); }
@@ -341,8 +352,8 @@ namespace Akamai {
       //Extract out all the ids of the peers and return as set of strings
       void get_peer_set(std::set<std::string>& peers) const;
       void get_removed_peer_set(std::set<std::string>& peers,uint age) const;
-      //Remove peers whose timestamp is older then max_age from current time
-      void remove_dead_peers(uint64_t max_age);
+      //Remove peers whose timestamp is older then max_age_removal from current time
+      void remove_dead_peers(uint64_t max_age_removal);
       //Update the timstamp of the given ID with timestamp, add ID to peers if it isn't present 
       void update_timestamp(std::string id,uint64_t timestamp);
       //Check if the (id,timestamp) is present in the peers
@@ -371,7 +382,7 @@ namespace Akamai {
       ct::DataBatteryPeers _peers;
       uint _fixed_peer_delay; //In seconds 
       uint _random_peer_delay; //In seconds
-      uint _max_age; //In milliseconds (set converts seconds to milliseconds)
+      uint _max_age_removal; //In milliseconds (set converts seconds to milliseconds)
   };
 
   //Need to expose when the last successfull heartbeat occured so that we can stop accepting new pending
@@ -399,18 +410,15 @@ namespace Akamai {
     public:
       uint get_leaves_count() const {
         uint count;
-        pthread_mutex_lock(&_mutex);
+        lock();
         count = _leaves.logged_certificate_pbs_size();
-        pthread_mutex_unlock(&_mutex);
+        unlock();
         return count;
       }
-      void lock() { pthread_mutex_lock(&_mutex); }
-      void unlock() { pthread_mutex_unlock(&_mutex); }
       const ct::LoggedCertificatePBList& get_leaves() const { return _leaves; }
       uint get_hash_size() const { return _leaves_hash.size(); }
-
     public:
-      std::set<std::string> _leaves_hash; //Kept around so we can check if we've already retrieved a leaf
+      std::set<std::string> _leaves_hash; //Kept around so we can easily check if we've already retrieved a leaf
       ct::LoggedCertificatePBList _leaves;
   };
 
@@ -450,7 +458,7 @@ namespace Akamai {
       //Commit the pending certs for all peers (including myself) that are within the desired time min_age
       bool commit_pending(uint64_t min_age, uint64_t commit_delay);
 
-      //Doesn't actually clear the pending table.  It just updates the first_key of each peer index to denote
+      //Doesn't actually clear the pending table.  It just updates the first_key of your peer index to denote
       //  where to start looking for pending certs.  We could actually delete keys out of the table, but I like
       //  maintaining the append only, never delete property.  
       void clear_pending(const std::set<std::string>& leaves_hash);
@@ -464,7 +472,7 @@ namespace Akamai {
       DataBattery* get_db() const { return _db; }
       PendingData* get_pd() const { return _pd; }
       LeavesData* get_ld() const { return _ld; }
-      HeartBeatData* get_hdb() const { return _hbd; }
+      HeartBeatData* get_hbd() const { return _hbd; }
       ConfigData* get_cnfgd() const { return _cnfgd; }
 
       virtual uint64_t get_max_entry_size() const { return _cnfgd->db_max_entry_size(); }
@@ -480,7 +488,7 @@ namespace Akamai {
       bool add_leaves(ct::LoggedCertificatePBList& lcpbl, uint commit_delay);
 
       //Gets all pending certs that have not yet been committed.  Used in the db_tool to grab a snapshot of the
-      //  pending certs.
+      //  pending certs, not used in ct-server.
       void get_all_pending(ct::LoggedCertificatePBList& pending_lcpbl);
 
     private:
@@ -583,13 +591,17 @@ namespace Akamai {
   };
   bool create_commit_thread(commit_thread_data* ctd);
 
-  /* Leaves thread is respondible for periodically pulling all the new certs from the leaves
+  /* Leaves thread is responsible for periodically pulling all the new certs from the leaves
    *   table in DataBattery.  If it has not previously retrieved any, it will just pull all of
    *   them, otherwise it will just get the new ones (plus whatever might be in the key value
-   *   shared with new certs
+   *   shared with new certs)
    * The thread does not update the local tree or database.  That is done in the main thread,
    *   this merely keeps a LoggedCertificatePBList up to date which the main thread will use to
    *   sync everything locally.
+   * In the main thread there is a scheduled repeating event called SignMerkleTree.  If you look
+   *   at that, there is a call to UpdateTree.  If you then look in tree_signer-inl.h you'll
+   *   see a call to update_from_data_battery, which actually gets the leaves collected by
+   *   this thread and commits them to the local sql db.
    */
 
   struct leaves_thread_data {

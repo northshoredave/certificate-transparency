@@ -80,6 +80,8 @@ typename Database<Logged>::WriteResult SQLiteDB<Logged>::CreatePendingEntry_(
   return this->OK;
 }
 
+//Akamai:  Added for efficiency.  It's expensive doing a transaction per leaf.  Much better
+//to open a transaction, do a whole bunch of inserts, and then commit.   
 template <class Logged> typename Database<Logged>::WriteResult
 SQLiteDB<Logged>::CreateNewEntry(const std::vector<leaf_entry>& new_leaves) {
   sqlite3_exec(db_,"BEGIN EXCLUSIVE TRANSACTION", 0, 0, 0);
