@@ -488,18 +488,18 @@ void read_pending(DataBattery* db, ConfigData& cnfg) {
 void check_point_loop(DataBattery* db, ConfigData& cnfg) {
   string leaves_pb = FLAGS_akamai_db_leaves+".pb";
   string pending_pb = FLAGS_akamai_db_pending+".pb";
-  checkPointer cp(FLAGS_dir_name,leaves_pb,pending_pb,FLAGS_max_num,FLAGS_max_space,FLAGS_max_age);
+  checkPointer cp(FLAGS_dir_name+"/",leaves_pb,pending_pb,FLAGS_max_num,FLAGS_max_space,FLAGS_max_age);
   LeavesData ld;
   leaves_thread_data ltd(db,&ld,&cnfg);
   CertTables cert_tables(db,"id",NULL,&ld,NULL,&cnfg);
   while (true) {
     uint num_of_leaves = ltd._ld->get_hash_size(); 
     leaves_helper(&ltd);
-    std::ofstream ofs(string(FLAGS_dir_name+leaves_pb).c_str());
+    std::ofstream ofs(string(FLAGS_dir_name+"/"+leaves_pb).c_str());
     ld.get_leaves().SerializeToOstream(&ofs);
     ofs.close();
 
-    uint num_of_pending = dump_pending(cert_tables,FLAGS_dir_name+pending_pb);
+    uint num_of_pending = dump_pending(cert_tables,FLAGS_dir_name+"/"+pending_pb);
     if ((num_of_leaves != ltd._ld->get_hash_size()) ||
         (num_of_pending != 0)) {
       cp.create_checkpoint();
