@@ -244,23 +244,18 @@ bool DataBattery::put_index(string table, string index_key, const DBIndex& index
 bool DataBattery::check_context() {
   bool failed(false);
 
+  LOG(INFO) << "check_context";
   //Get cert/key stats
-  struct stat certStat, keyStat;
-  while (stat(_settings._cert.c_str(),&certStat) != 0) {
-    LOG(INFO) << "DB: Couldn't load db certificate " << _settings._cert;
+  while (!_cert_mngr.has_matching_keys()) {
+    LOG(INFO) << "DB: Couldn't find matching cert/key pair";
     if (_settings._key_sleep) { sleep(_settings._key_sleep); }
     else { failed = true; return false; }
   }
-  while (stat(_settings._pvkey.c_str(),&keyStat) != 0) {
-    LOG(INFO) << "DB: Couldn't load db pvkey " << _settings._pvkey;
-    if (_settings._key_sleep) { sleep(_settings._key_sleep); }
-    else { failed = true; return false; }
-  }
+  LOG(INFO) << "Found matching keys";
   //Check if you already have a ctx
   if (_ctx) { 
     //Check if the cert+key have changed.  If yes, re-create context.  No, just return true.
-    if (certStat.st_mtime > _last_cert &&
-        keyStat.st_mtime > _last_key) {
+    if (_cert_mngr.has_key_pair_changed()) {
       LOG(INFO) << "DB: cert and key have changed, updating context";
       SSL_CTX_free(_ctx); 
       _ctx = NULL;
@@ -275,17 +270,17 @@ bool DataBattery::check_context() {
     LOG(ERROR) << "DB: Failed to create CTX";
     failed = true;
   }
-  if (!failed&&SSL_CTX_use_certificate_file(_ctx,_settings._cert.c_str(),SSL_FILETYPE_PEM)!=1) {
-    LOG(INFO) << "DB: Couldn't load certificate " << _settings._cert;
+  if (!failed&&SSL_CTX_use_certificate_file(_ctx,_cert_mngr.get_cur_cert().c_str(),SSL_FILETYPE_PEM)!=1) {
+    LOG(INFO) << "DB: Couldn't load certificate " << _cert_mngr.get_cur_cert();
     failed = true;
   }
-  LOG(INFO) << "DB: Loaded certificate " << _settings._cert;
+  LOG(INFO) << "DB: Loaded certificate " << _cert_mngr.get_cur_cert();
 
-  if (!failed&&SSL_CTX_use_PrivateKey_file(_ctx,_settings._pvkey.c_str(),SSL_FILETYPE_PEM)!=1) {
-    LOG(INFO) << "DB: Couldn't load private key " << _settings._pvkey;
+  if (!failed&&SSL_CTX_use_PrivateKey_file(_ctx,_cert_mngr.get_cur_key().c_str(),SSL_FILETYPE_PEM)!=1) {
+    LOG(INFO) << "DB: Couldn't load private key " << _cert_mngr.get_cur_key();
     failed = true;
   } 
-  LOG(INFO) << "DB: Loaded private key "<< _settings._pvkey;
+  LOG(INFO) << "DB: Loaded private key "<< _cert_mngr.get_cur_key();
 
   //Verify the key against cert
   if (!failed&&SSL_CTX_check_private_key(_ctx)!=1) {
@@ -299,8 +294,6 @@ bool DataBattery::check_context() {
     _ctx = NULL;
   }
   if (!failed) {
-    _last_cert = certStat.st_mtime;
-    _last_key = keyStat.st_mtime;
     time(&_last_cert_check);
   }
   return !failed;
@@ -309,8 +302,7 @@ bool DataBattery::check_context() {
 DataBattery::DataBattery(const Settings& settings)
         : _settings(settings)
         , _ctx(NULL)
-        , _last_cert(0)
-        , _last_key(0)
+        , _cert_mngr(settings._cert_dir,settings._cert,settings._pvkey)
         , _status(-1)
 {
   //Load libraries if needed
@@ -1268,3 +1260,115 @@ void ConfigData::gen_key_values(vector<pair<string, string> >& kv_pairs) const {
   }
   pthread_mutex_unlock(&_mutex);
 }
+
+int CertManager::find_indexes(boost::regex& rgx, const vector<fs::path>& files, 
+    map<int,fs::path>& indexes) const {
+  boost::smatch match;
+  indexes.clear();
+  int num_matches(0);
+  for (vector<fs::path>::const_iterator fIt = files.begin(); fIt != files.end();
+      ++fIt) {
+    string filename = fIt->filename().string();
+    if (boost::regex_match(filename,match,rgx)) {
+      ++num_matches;
+      if (match.size() == 2) { 
+        string sindex = match[1].str();
+        int index = atoi(sindex.c_str());
+        indexes[index] = *fIt;
+      } else {
+        indexes[-1] = *fIt;
+      }
+    }
+  }
+  return num_matches;
+}
+
+bool CertManager::find_matching_key_cert(const vector<fs::path>& files) {
+  boost::regex cert_rgx(_cert_pattern);
+  boost::regex key_rgx(_key_pattern);
+  map<int,fs::path> cert_indexes, key_indexes;
+  int found_certs = find_indexes(cert_rgx,files,cert_indexes);
+  int found_keys = find_indexes(key_rgx,files,key_indexes);
+
+  if (found_certs == 0 || found_keys == 0) {
+    LOG(INFO) << "Failed to find cert:" << found_certs << " or key:" << found_keys;
+    return false;
+  }
+  _cert_key_index = -2;
+  for (map<int,fs::path>::const_iterator cIt = cert_indexes.begin();
+      cIt != cert_indexes.end(); ++cIt) {
+    if (key_indexes.find(cIt->first) != key_indexes.end()) { 
+      _cert_key_index = cIt->first; 
+      LOG(INFO) << "Found matching key index " << _cert_key_index;
+    }
+  }
+
+  if (_cert_key_index == -2) {
+    LOG(INFO) << "No matching key/cert pair";
+    return false;
+  } else {
+    if (_cur_cert.empty() || _cur_cert.compare(cert_indexes[_cert_key_index])!=0) {
+      _cur_cert_time = 0;
+    }
+    _cur_cert = cert_indexes[_cert_key_index];
+    if (_cur_key.empty() || _cur_key.compare(key_indexes[_cert_key_index])!=0) {
+      _cur_key_time = 0;
+    }
+    _cur_key = key_indexes[_cert_key_index];
+    LOG(INFO) << "After reg checks highest index " << _cert_key_index;
+    LOG(INFO) << "Cert:" << _cur_cert.filename() << " Key:" << _cur_key.filename();
+  }
+  return true;
+}
+
+bool CertManager::has_matching_keys() {
+  try {
+    fs::path cert_dir(_cert_key_dir);
+    if (!fs::exists(cert_dir)||!fs::is_directory(cert_dir)) {
+      LOG(INFO) << "Cert directory not found " << cert_dir.string();
+    }
+    vector<fs::path> cert_key_files;
+    fs::directory_iterator end_iter;
+    for (fs::directory_iterator dir_itr(cert_dir);
+       dir_itr != end_iter; ++dir_itr) {
+      if (fs::is_regular_file(dir_itr->status())) {
+        cert_key_files.push_back(dir_itr->path());
+      }
+    }
+    if (!find_matching_key_cert(cert_key_files)) {
+      _has_matching_keys = false;
+      return false;
+    } else {
+      _has_matching_keys = true;
+      return true;
+    }
+  } catch (exception& e) {
+    LOG(INFO) << "Caught exception " << e.what();
+  } catch (...) {
+    LOG(INFO) << "Unknown exception";
+  }
+  return false;
+}
+
+bool CertManager::has_key_pair_changed() {
+  if (!_has_matching_keys) { 
+    LOG(INFO) << "No matching keys, so returning false, nothing to load";
+    return false;
+  }
+  try {
+    if (fs::last_write_time(_cur_cert) != _cur_cert_time ||
+        fs::last_write_time(_cur_key) != _cur_key_time) {
+      _cur_key_time = fs::last_write_time(_cur_key);
+      _cur_cert_time = fs::last_write_time(_cur_cert);
+      return true;
+    }
+    return false;
+  } catch (exception& e) {
+    LOG(INFO) << "Caught exception " << e.what();
+  } catch (...) {
+    LOG(INFO) << "Unknown exception";
+  }
+
+  return false;
+}
+

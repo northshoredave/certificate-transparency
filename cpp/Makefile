@@ -5,7 +5,7 @@ default: all
 
 -include local.mk
 
-CXXFLAG = -Wall -g -O3
+CXXFLAG = -Wall -g -O3 -std=c++0x -std=gnu++0x
 LINK.o = $(LINK.cc)
 
 INCLUDE = -I .
@@ -28,7 +28,7 @@ endif
 ifeq ($(PLATFORM), Darwin)
   LDLIBS += -lboost_system-mt -lboost_thread-mt
 else
-  LDLIBS += -lboost_system -lboost_thread -lboost_filesystem -lboost_date_time
+  LDLIBS += -lboost_system -lboost_thread -lboost_filesystem -lboost_date_time -lboost_regex
 endif
 
 # Need OpenSSL >= 1.0.0

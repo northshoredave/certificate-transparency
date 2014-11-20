@@ -41,6 +41,7 @@ DEFINE_string(akamai_db_serv,"443",
               "Port or service for DataBattery");
 DEFINE_string(akamai_db_cert,"", "Cert to use when accessing DataBattery");
 DEFINE_string(akamai_db_key,"", "Key to use when accessing DataBattery");
+DEFINE_string(akamai_db_cert_dir,"","What directory to look in for DataBattery cert/key");
 DEFINE_string(akamai_db_pending,"pending","What table to get pending from.");
 DEFINE_string(akamai_db_leaves,"leaves","What table to get leaves from");
 DEFINE_string(akamai_db_index,"index","Key name for index in any DB table");
@@ -488,18 +489,18 @@ void read_pending(DataBattery* db, ConfigData& cnfg) {
 void check_point_loop(DataBattery* db, ConfigData& cnfg) {
   string leaves_pb = FLAGS_akamai_db_leaves+".pb";
   string pending_pb = FLAGS_akamai_db_pending+".pb";
-  checkPointer cp(FLAGS_dir_name+"/",leaves_pb,pending_pb,FLAGS_max_num,FLAGS_max_space,FLAGS_max_age);
+  checkPointer cp(FLAGS_dir_name,leaves_pb,pending_pb,FLAGS_max_num,FLAGS_max_space,FLAGS_max_age);
   LeavesData ld;
   leaves_thread_data ltd(db,&ld,&cnfg);
   CertTables cert_tables(db,"id",NULL,&ld,NULL,&cnfg);
   while (true) {
     uint num_of_leaves = ltd._ld->get_hash_size(); 
     leaves_helper(&ltd);
-    std::ofstream ofs(string(FLAGS_dir_name+"/"+leaves_pb).c_str());
+    std::ofstream ofs(string(FLAGS_dir_name+leaves_pb).c_str());
     ld.get_leaves().SerializeToOstream(&ofs);
     ofs.close();
 
-    uint num_of_pending = dump_pending(cert_tables,FLAGS_dir_name+"/"+pending_pb);
+    uint num_of_pending = dump_pending(cert_tables,FLAGS_dir_name+pending_pb);
     if ((num_of_leaves != ltd._ld->get_hash_size()) ||
         (num_of_pending != 0)) {
       cp.create_checkpoint();
@@ -514,12 +515,15 @@ void check_point_loop(DataBattery* db, ConfigData& cnfg) {
 int main(int argc, char* argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
+  //CertManager cm("/home/dcurrie/clients/dcurrie_ct2.0.clean/CertificateTransparency/tmp/","ssl_cert\\.([0-9]+)\\.certificate","ssl_cert\\.([0-9]+)\\.private_key");
+
   OpenSSL_add_all_algorithms();
   ERR_load_crypto_strings();
   cert_trans::LoadCtExtensions();
 
   DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
-    FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,5,0,FLAGS_akamai_db_preface);
+    FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key, FLAGS_akamai_db_cert_dir,
+    5,0,FLAGS_akamai_db_preface);
   DataBattery* db = new DataBattery(db_settings);
   CHECK(db->is_good()) << "Failed to create DataBattery instance for db";
 

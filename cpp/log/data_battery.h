@@ -9,7 +9,10 @@
 #include <map>
 #include <vector>
 #include <set>
+#include "boost/regex.hpp"
+#include "boost/filesystem.hpp"
 
+namespace fs = boost::filesystem;
 namespace Akamai {
   /* Purpose of this class is to parse the returned header from a http call. *
    *  We're using http 1.0 at this point, so we don't pay much attention to the *
@@ -140,6 +143,62 @@ namespace Akamai {
       ct::DataBatteryIndex _dbIndex;
   };
 
+  /*  CertManager purpose is to watch certs directory and indicate if it has changed or if a new 
+   *  cert/key has been dropped into the directory.  It will watch for AppBatterys automatic 
+   *  secret generation which has format:
+   *     ssl_cert.[index].certificate ssl_cert.[index].private_key
+   *  So you have to detect which cert is in the directory with the highest index and use that.
+   *
+   *  Manager uses a regular pattern and if the pattern has a submatch, that submatch must be
+   *  the index.  Otherwise the pattern must match only 1 file.
+   *    Example/
+   *        ssl_cert\\.([0-9]+)\\.certificate
+   *        ssl_cert\\.([0-9]+)\\.private_key
+   *  Would match the current app battery format and the index will be scanned to find the max
+   *  matching index.
+   *     Example/
+   *        ssl_cert.foo.certificate
+   *        ssl_cert.bar.private_key
+   *   Those two files must be present exactly.
+   */
+  class CertManager {
+    public:
+      CertManager(std::string cert_key_dir, std::string cert_pattern, std::string key_pattern) 
+        : _cur_cert_time(0)
+          , _cur_key_time(0)
+          , _cert_pattern(cert_pattern)
+          , _key_pattern(key_pattern)
+          , _cert_key_index(-2)
+          , _cert_key_dir(cert_key_dir)
+          , _has_matching_keys(false)
+      { }
+
+      //Checks if a cert/key pair has changed based on timestamp.  
+      //NOTE: You must call has_matching_keys first.  This looks for new key names and resets
+      //timestamps if some are found
+      bool has_key_pair_changed();
+      //Looks for new keys based on names
+      bool has_matching_keys();
+      std::string get_cur_cert() const { return _cur_cert.string(); }
+      std::string get_cur_key() const { return _cur_key.string(); }
+    private:
+      bool get_files(std::vector<fs::path>& cert_key_files) const;
+      int find_indexes(boost::regex& rgx, const std::vector<fs::path>& files, 
+          std::map<int,fs::path>& indexes) const;
+      bool find_matching_key_cert(const std::vector<fs::path>& files);
+
+    private:
+      fs::path _cur_cert; //The current in use cert
+      time_t _cur_cert_time; //Timestamp of cert file when it was read
+      fs::path _cur_key; //The current in use key
+      time_t _cur_key_time; //Timestamp of key file when it was read
+      std::string _cert_pattern; //Pattern to match for cert
+      std::string _key_pattern; //Pattern to match for key
+      int _cert_key_index; //If following pattern <prefix>.[index].<postfix>
+      std::string _cert_key_dir; //Directory to look for cert/key pairs
+      bool _has_matching_keys; //Whether we found matching cert/key pair
+  };
+
   /* DataBattery class is to encapsulate the low level calls to DataBattery including the underlying ssl 
    * connection, etc.
    *   app:  name of DataBattery app (probably ct)
@@ -157,11 +216,13 @@ namespace Akamai {
     public:
       struct Settings {
         Settings(std::string app, std::string host, std::string serv, std::string cert, 
-            std::string pvkey, uint32_t key_sleep, uint32_t cert_key_check_delay,std::string preface)
+            std::string pvkey, std::string cert_dir, uint32_t key_sleep, 
+            uint32_t cert_key_check_delay, std::string preface)
           : _app(app) , _host(host) , _serv(serv) , _cert(cert) , _pvkey(pvkey), _preface(preface)
+          , _cert_dir(cert_dir)
           , _key_sleep(key_sleep), _cert_key_check_delay(cert_key_check_delay)
         {}
-        std::string _app, _host, _serv, _cert, _pvkey, _preface;
+        std::string _app, _host, _serv, _cert, _pvkey, _preface, _cert_dir;
         uint32_t _key_sleep, _cert_key_check_delay;
       };
     public:
@@ -210,8 +271,7 @@ namespace Akamai {
     private:
       Settings _settings;
       SSL_CTX* _ctx;
-      time_t _last_cert; //Timestamp of last cert read. Used to check if new cert has arrived
-      time_t _last_key; //Timestamp of last cert read. Used to check if new cert has arrived
+      CertManager _cert_mngr;
       time_t _last_cert_check; //Last time you checked if cert had changed
       int _status; //Set when an error occurs with a GET or PUT
       static bool _loadlibraries; //Libraries only needed to be loaded once, do so when first DataBattery built

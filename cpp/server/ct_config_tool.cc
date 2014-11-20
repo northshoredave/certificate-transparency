@@ -37,6 +37,7 @@ DEFINE_string(akamai_db_serv,"443",
               "Port or service for DataBattery");
 DEFINE_string(akamai_db_cert,"", "Cert to use when accessing DataBattery");
 DEFINE_string(akamai_db_key,"", "Key to use when accessing DataBattery");
+DEFINE_string(akamai_db_cert_dir,"","What directory to look in for DataBattery cert/key");
 DEFINE_string(akamai_db_config_table,"pending","What table to get config from.");
 DEFINE_string(akamai_db_config_key,"config","What key to retrieve from config_table");
 DEFINE_string(akamai_input_file,"empty","File to read config from");
@@ -54,7 +55,8 @@ int main(int argc, char* argv[]) {
   cert_trans::LoadCtExtensions();
 
   DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
-  FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,5,0,FLAGS_akamai_db_preface);
+  FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,FLAGS_akamai_db_cert_dir,
+  5,0,FLAGS_akamai_db_preface);
   DataBattery* db = new DataBattery(db_settings);
   CHECK(db->is_good()) << "Failed to create DataBattery instance for db";
 
