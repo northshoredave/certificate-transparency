@@ -181,6 +181,9 @@ namespace Akamai {
       bool has_matching_keys();
       std::string get_cur_cert() const { return _cur_cert.string(); }
       std::string get_cur_key() const { return _cur_key.string(); }
+      //Reject the current cert/key pair because it failed while loading
+      void reject_keys();
+
     private:
       bool get_files(std::vector<fs::path>& cert_key_files) const;
       int find_indexes(boost::regex& rgx, const std::vector<fs::path>& files, 
@@ -197,6 +200,7 @@ namespace Akamai {
       int _cert_key_index; //If following pattern <prefix>.[index].<postfix>
       std::string _cert_key_dir; //Directory to look for cert/key pairs
       bool _has_matching_keys; //Whether we found matching cert/key pair
+      std::map<std::string,time_t> _rejected_keys; //Keys that have gotten rejected along with timestamp
   };
 
   /* DataBattery class is to encapsulate the low level calls to DataBattery including the underlying ssl 

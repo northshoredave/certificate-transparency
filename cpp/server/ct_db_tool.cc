@@ -515,7 +515,23 @@ void check_point_loop(DataBattery* db, ConfigData& cnfg) {
 int main(int argc, char* argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
+
+  CertManager cm(FLAGS_akamai_db_cert_dir, FLAGS_akamai_db_cert, FLAGS_akamai_db_key);
   //CertManager cm("/home/dcurrie/clients/dcurrie_ct2.0.clean/CertificateTransparency/tmp/","ssl_cert\\.([0-9]+)\\.certificate","ssl_cert\\.([0-9]+)\\.private_key");
+  while (1) {
+    cm.has_matching_keys();
+    if (cm.has_key_pair_changed()) {
+      LOG(INFO) << "Key has changed";
+      if (cm.get_cur_cert() == "test.5.certificate") {
+        cm.reject_keys();
+      }
+    } else {
+      LOG(INFO) << "No key change";
+    }
+    sleep(10);
+  }
+
+  exit(1);
 
   OpenSSL_add_all_algorithms();
   ERR_load_crypto_strings();

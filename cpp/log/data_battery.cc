@@ -292,6 +292,7 @@ bool DataBattery::check_context() {
   if (failed&&_ctx) {
     SSL_CTX_free(_ctx); 
     _ctx = NULL;
+    _cert_mngr.reject_keys();
   }
   if (!failed) {
     time(&_last_cert_check);
@@ -468,7 +469,10 @@ bool DataBattery::METHOD(string msg, bool returnOnSuccess, string& value, uint s
     time_t current_time;
     time(&current_time);
     if (current_time > _settings._cert_key_check_delay+_last_cert_check) {
-      check_context();
+      if (!check_context()) { 
+        LOG(WARNING) << "DB: Failed check_context";
+        return false;
+      }
     }
   }
   SSL* ssl = ssl_connect();
@@ -1307,11 +1311,22 @@ bool CertManager::find_matching_key_cert(const vector<fs::path>& files) {
     LOG(INFO) << "No matching key/cert pair";
     return false;
   } else {
-    if (_cur_cert.empty() || _cur_cert.compare(cert_indexes[_cert_key_index])!=0) {
+    if (!_cur_cert.empty()) {
+      LOG(INFO) << "Not empty, " << _cur_cert.string();
+    }
+    LOG(INFO) << "cert key index " << _cert_key_index;
+    if (cert_indexes.find(_cert_key_index) == cert_indexes.end()) {
+      LOG(INFO) << "cert index not found";
+    } else {
+      LOG(INFO) << "cert index found " << cert_indexes[_cert_key_index].string();
+    }
+    //Not sure why compare doesn't work, but it throws an exception.  Work around is to use the string
+    if (_cur_cert.empty() || _cur_cert.string() != cert_indexes[_cert_key_index].string()) {
       _cur_cert_time = 0;
     }
+    LOG(INFO) << "After compare ";
     _cur_cert = cert_indexes[_cert_key_index];
-    if (_cur_key.empty() || _cur_key.compare(key_indexes[_cert_key_index])!=0) {
+    if (_cur_key.empty() || _cur_key.string() != key_indexes[_cert_key_index].string()) {
       _cur_key_time = 0;
     }
     _cur_key = key_indexes[_cert_key_index];
@@ -1332,7 +1347,12 @@ bool CertManager::has_matching_keys() {
     for (fs::directory_iterator dir_itr(cert_dir);
        dir_itr != end_iter; ++dir_itr) {
       if (fs::is_regular_file(dir_itr->status())) {
-        cert_key_files.push_back(dir_itr->path());
+        map<string,time_t>::const_iterator rejectIt = _rejected_keys.find(dir_itr->path().string());
+        if (rejectIt == _rejected_keys.end() || rejectIt->second != fs::last_write_time(dir_itr->path())) { 
+          cert_key_files.push_back(dir_itr->path());
+        } else {
+          LOG(INFO) << "Skipping rejected cert/key " << dir_itr->path().string();
+        }
       }
     }
     if (!find_matching_key_cert(cert_key_files)) {
@@ -1372,3 +1392,11 @@ bool CertManager::has_key_pair_changed() {
   return false;
 }
 
+void CertManager::reject_keys() {
+  if (!_cur_cert.empty() && !_cur_key.empty()) {
+    _rejected_keys[_cur_cert.string()] = _cur_cert_time;
+    _rejected_keys[_cur_key.string()] = _cur_key_time;
+  }
+  _cur_cert_time = 0;
+  _cur_key_time = 0;
+}
