@@ -1205,6 +1205,9 @@ bool Akamai::create_leaves_thread(leaves_thread_data* ltd) {
   if (leaves_helper(ltd) != LONG_SLEEP) {
     LOG(ERROR) << "LT: Should have returned succesfully";
     return false;
+  } else {
+    LOG(INFO) << "LT: successfully loaded leaves (if any)";
+    ltd->_ld->update_time();
   }
   //Now create thread
   pthread_t t;
