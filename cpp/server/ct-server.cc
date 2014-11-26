@@ -69,6 +69,7 @@ DEFINE_string(akamai_db_cert_dir,"","What directory to look in for DataBattery c
 DEFINE_string(akamai_db_request_bytes,"request_bytes","name of limit to get max entry value size");
 DEFINE_string(akamai_db_config_table,"pending","What table to get config from.");
 DEFINE_string(akamai_db_config_key,"config","What key to retrieve from config_table");
+DEFINE_string(akamai_use_local_config,"empty","If specified, then use this local version of config instead of getting it from DataBattery");
 DEFINE_string(akamai_tableprov_dir,"query","What directory to write query tables in to get picked up by tabelprov");
 DEFINE_bool(akamai_allow_cert_sub,true,"Whether to allow cert submission (is this a query only ct?)");
 DEFINE_bool(akamai_allow_audit,true,"Whether to allow audit,proof queries?");
@@ -103,6 +104,20 @@ namespace Akamai {
           , _cnfgtd(NULL)
       {}
 
+      bool read_config_from_file() {
+        std::ifstream ifs(FLAGS_akamai_use_local_config.c_str());
+        if (ifs.fail()) {
+          LOG(ERROR) << "Failed to read local config file " << FLAGS_akamai_use_local_config;
+          return false; 
+        }
+        google::protobuf::io::IstreamInputStream* ifo =
+          new google::protobuf::io::IstreamInputStream(&ifs);
+        bool success = _cnfgd.parse_from_stream(ifo); 
+        delete ifo;
+        ifs.close();
+        return success;
+      }
+
       void init() 
       {
         _id = Peers::randByteString(16);
@@ -131,7 +146,11 @@ namespace Akamai {
         //Now get the config
         _cnfgtd = new config_thread_data(cnfg_db,FLAGS_akamai_db_config_table,FLAGS_akamai_db_config_key,
             &_cnfgd);
-        CHECK(create_config_thread(_cnfgtd));
+        if (FLAGS_akamai_use_local_config == "empty") {
+          CHECK(create_config_thread(_cnfgtd));
+        } else {
+          CHECK(read_config_from_file());
+        }
         LOG(INFO) << "Set db_max_entry_size " << _cnfgd.db_max_entry_size();
 
         //Init some query stuff now that you have config

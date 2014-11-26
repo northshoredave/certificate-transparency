@@ -4,6 +4,8 @@
 #include <openssl/ssl.h>
 #include <openssl/rand.h>
 #include <proto/ct.pb.h>
+#include <google/protobuf/text_format.h>
+#include <google/protobuf/io/zero_copy_stream_impl.h>
 #include "util/util.h"
 #include <string>
 #include <map>
@@ -331,6 +333,9 @@ namespace Akamai {
         ret = _config.ParseFromString(value);
         pthread_mutex_unlock(&_mutex);
         return ret;
+      }
+      bool parse_from_stream(google::protobuf::io::IstreamInputStream* ifo) {
+        return google::protobuf::TextFormat::Parse(ifo,&_config);
       }
 #define getLockMutex(f,t) \
       t ret; \
