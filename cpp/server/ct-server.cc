@@ -375,24 +375,25 @@ static const bool sign_dummy =
 // frequently).
 class PeriodicCallback {
  public:
-  PeriodicCallback(const shared_ptr<libevent::Base>& base, int interval_secs,
+  PeriodicCallback(const shared_ptr<libevent::Base>& base, 
+                   const function<int()>& time_interval,
                    const function<void()>& callback)
       : base_(base),
-        interval_secs_(interval_secs),
         event_(*base_, -1, 0, bind(&PeriodicCallback::Go, this)),
+        time_interval_(time_interval),
         callback_(callback) {
-    event_.Add(interval_secs_);
+    event_.Add(time_interval_());
   }
 
  private:
   void Go() {
     callback_();
-    event_.Add(interval_secs_);
+    event_.Add(time_interval_());
   }
 
   const shared_ptr<libevent::Base> base_;
-  const int interval_secs_;
   libevent::Event event_;
+  const function<int()> time_interval_;
   const function<void()> callback_;
 
   DISALLOW_COPY_AND_ASSIGN(PeriodicCallback);
@@ -411,6 +412,10 @@ void SignMerkleTree(TreeSigner<LoggedCertificate> *tree_signer,
   LOG(INFO) << "Tree successfully updated at " << ctime_r(&last_update, buf);
 }
 
+int SignMerkleTree_interval(Akamai::main_setup* main_data) {
+  return main_data->get_config().tree_signing_freq();
+}
+
 void AkamaiQueryEvent(Akamai::main_setup* main_data,
                       LogLookup<LoggedCertificate> *log_lookup) {
   LOG(INFO) << "Query event";
@@ -426,9 +431,17 @@ void AkamaiQueryEvent(Akamai::main_setup* main_data,
   CHECK(Akamai::query_interface::instance()->update_tables());
 }
 
+int AkamaiQueryEvent_interval(Akamai::main_setup* main_data) {
+  return main_data->get_config().query_freq();
+}
+
 void AkamaiHealthCheck(Akamai::main_setup* main_data) {
   LOG(INFO) << "Run health check";
   Akamai::query_interface::instance()->set_is_main_ok(main_data->is_ok());
+}
+
+int AkamaiHealthCheck_interval(Akamai::main_setup* main_data) {
+  return main_data->get_config().health_check_freq();
 }
 
 int main(int argc, char* argv[]) {
@@ -509,7 +522,8 @@ int main(int argc, char* argv[]) {
 
   LOG(INFO) << "Create tree signing event "
             << FLAGS_tree_signing_frequency_seconds;
-  PeriodicCallback tree_event(event_base, FLAGS_tree_signing_frequency_seconds,
+  PeriodicCallback tree_event(event_base,
+                              boost::bind(&SignMerkleTree_interval, akamai),
                               boost::bind(&SignMerkleTree, &tree_signer,
                                           &log_lookup, FLAGS_akamai_run));
 
@@ -518,11 +532,11 @@ int main(int argc, char* argv[]) {
   if (FLAGS_akamai_run) {
     LOG(INFO) << "Create akamai query event " << akamai->get_config().query_freq();
     akamai_query_event = new PeriodicCallback(
-        event_base, akamai->get_config().query_freq(), 
+        event_base, boost::bind(&AkamaiQueryEvent_interval,akamai),
         boost::bind(&AkamaiQueryEvent,akamai,&log_lookup));
     LOG(INFO) << "Create akamai health check event " << akamai->get_config().health_check_freq();
     akamai_health_check_event = new PeriodicCallback(
-        event_base, akamai->get_config().health_check_freq(),
+        event_base, boost::bind(&AkamaiHealthCheck_interval,akamai),
         boost::bind(&AkamaiHealthCheck,akamai));
   }
 

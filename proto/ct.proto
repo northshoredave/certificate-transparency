@@ -290,4 +290,6 @@ message AkamaiConfig {
   optional uint32 buffer_safety = 21 [ default = 100 ];
   //How often to check health in main thread
   optional uint32 health_check_freq = 22 [ default = 15 ];
+  //How often to sign tree
+  optional uint32 tree_sign_freq = 23 [ default = 15 ];
 }

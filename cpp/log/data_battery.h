@@ -383,6 +383,7 @@ namespace Akamai {
       uint64_t short_sleep() const { getLockMutex(_config.short_sleep,uint64_t); }
       uint32_t query_freq() const { getLockMutex(_config.query_freq,uint32_t); }
       uint32_t health_check_freq() const { getLockMutex(_config.health_check_freq,uint32_t); }
+      uint32_t tree_signing_freq() const { getLockMutex(_config.tree_sign_freq,uint32_t); } 
       uint32_t bucket_time() const { getLockMutex(_config.bucket_time,uint32_t); } 
       uint32_t buffer_safety() const { getLockMutex(_config.buffer_safety,uint32_t); }
       std::vector<uint32_t> bucket_sets() const { getVLockMutex(_config.bucket_sets,uint32_t); }
