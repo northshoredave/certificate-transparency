@@ -10,6 +10,7 @@
 #include <vector>
 #include <set>
 #include "boost/regex.hpp"
+#define BOOST_NO_CXX11_SCOPED_ENUMS
 #include "boost/filesystem.hpp"
 
 namespace fs = boost::filesystem;

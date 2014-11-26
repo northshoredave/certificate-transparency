@@ -25,6 +25,142 @@ namespace {
 using namespace std;
 using namespace Akamai;
 
+#define TEST_INPUTS "../../test/akamai_testdata/"
+
+class CertManagerTest : public ::testing::Test {
+  protected:
+    CertManagerTest() 
+      : _cert_mng_test_dir(fs::temp_directory_path())
+      , _dummy_file(string(TEST_INPUTS)+string("cert_mngr_file.txt"))
+    {
+      _cert_mng_test_dir /= "cert_mngr_test"; 
+      if (!fs::create_directory(_cert_mng_test_dir)) {
+        LOG(ERROR) << "Failed to create input directory";
+      }
+      if (!fs::exists(_dummy_file)||!fs::is_regular_file(_dummy_file)) {
+        LOG(ERROR) << "Failed to find dummy input file";
+      }
+    }
+    ~CertManagerTest() {
+      fs::remove_all(_cert_mng_test_dir);
+    }
+    //Copies a dummy file to specified file location
+    string add_file(string file) {
+      fs::path new_location = _cert_mng_test_dir;
+      new_location /= file;
+      fs::copy_file(_dummy_file,new_location,fs::copy_option::overwrite_if_exists);
+      return new_location.string();
+    }
+    void rm_file(string file) {
+      fs::path old_location = _cert_mng_test_dir;
+      old_location /= file;
+      if (fs::exists(old_location)&&fs::is_regular_file(old_location)) {
+        fs::remove(old_location);
+      }
+    }
+
+    fs::path _cert_mng_test_dir;
+    fs::path _dummy_file;
+};
+
+TEST_F(CertManagerTest,FixedFilenames) {
+  string cert_name("ssl_cert.certificate");
+  string key_name("ssl_cert.private_key");
+  CertManager cert_mngr(_cert_mng_test_dir.string(),cert_name,key_name);
+  string tmp_cert_file = add_file(cert_name);
+  string tmp_key_file = add_file(key_name);
+  ASSERT_TRUE(cert_mngr.has_matching_keys());
+  ASSERT_TRUE(cert_mngr.has_key_pair_changed());
+  ASSERT_EQ(cert_mngr.get_cur_cert(),tmp_cert_file);
+  ASSERT_EQ(cert_mngr.get_cur_key(),tmp_key_file);
+  //Check that key hasn't changed if you check again
+  ASSERT_FALSE(cert_mngr.has_key_pair_changed());
+  //Touch one file and check that pair stays the same, but is marked as changed
+  sleep(1); //Need to sleep briefly so timestamp changes
+  tmp_cert_file = add_file(cert_name);
+  ASSERT_TRUE(cert_mngr.has_matching_keys());
+  ASSERT_TRUE(cert_mngr.has_key_pair_changed());
+  ASSERT_EQ(cert_mngr.get_cur_cert(),tmp_cert_file);
+  ASSERT_EQ(cert_mngr.get_cur_key(),tmp_key_file);
+  //Touch both files and chek that pair stays the same but is marked as changed
+  tmp_cert_file = add_file(cert_name);
+  tmp_key_file = add_file(key_name);
+  ASSERT_TRUE(cert_mngr.has_matching_keys());
+  ASSERT_TRUE(cert_mngr.has_key_pair_changed());
+  ASSERT_EQ(cert_mngr.get_cur_cert(),tmp_cert_file);
+  ASSERT_EQ(cert_mngr.get_cur_key(),tmp_key_file);
+  //Again, check that another check shows nothing changed
+  ASSERT_FALSE(cert_mngr.has_key_pair_changed());
+}
+
+TEST_F(CertManagerTest,IndexedFilenames) {
+  CertManager cert_mngr(_cert_mng_test_dir.string(),"ssl_cert\\.([0-9]+)\\.certificate",
+      "ssl_cert\\.([0-9]+)\\.private_key");
+  string tmp_cert_file = add_file("ssl_cert.0.certificate");
+  string tmp_key_file = add_file("ssl_cert.0.private_key");
+  ASSERT_TRUE(cert_mngr.has_matching_keys());
+  ASSERT_TRUE(cert_mngr.has_key_pair_changed());
+  ASSERT_EQ(cert_mngr.get_cur_cert(),tmp_cert_file); 
+  ASSERT_EQ(cert_mngr.get_cur_key(),tmp_key_file);
+  //Check that key hasn't changed if you check again
+  ASSERT_FALSE(cert_mngr.has_key_pair_changed());
+  //Touch one of the keys, don't change files
+  sleep(1);
+  tmp_cert_file = add_file("ssl_cert.0.certificate");
+  ASSERT_TRUE(cert_mngr.has_matching_keys());
+  ASSERT_TRUE(cert_mngr.has_key_pair_changed());
+  ASSERT_EQ(cert_mngr.get_cur_cert(),tmp_cert_file); 
+  ASSERT_EQ(cert_mngr.get_cur_key(),tmp_key_file);
+  //Now add next index
+  string tmp_one_cert_file = add_file("ssl_cert.1.certificate");
+  string tmp_one_key_file = add_file("ssl_cert.1.private_key");
+  ASSERT_TRUE(cert_mngr.has_matching_keys());
+  ASSERT_TRUE(cert_mngr.has_key_pair_changed());
+  ASSERT_EQ(cert_mngr.get_cur_cert(),tmp_one_cert_file); 
+  ASSERT_EQ(cert_mngr.get_cur_key(),tmp_one_key_file);
+  //Add another key, but skip one index.  See if you get the right one
+  tmp_cert_file = add_file("ssl_cert.3.certificate");
+  tmp_key_file = add_file("ssl_cert.3.private_key");
+  ASSERT_TRUE(cert_mngr.has_matching_keys());
+  ASSERT_TRUE(cert_mngr.has_key_pair_changed());
+  ASSERT_EQ(cert_mngr.get_cur_cert(),tmp_cert_file); 
+  ASSERT_EQ(cert_mngr.get_cur_key(),tmp_key_file);
+  //Add a mismatched higher key, check you stay with old key pair
+  add_file("ssl_cert.4.private_key");
+  ASSERT_TRUE(cert_mngr.has_matching_keys());
+  ASSERT_FALSE(cert_mngr.has_key_pair_changed()); //Key should not have changed
+  ASSERT_EQ(cert_mngr.get_cur_cert(),tmp_cert_file); 
+  ASSERT_EQ(cert_mngr.get_cur_key(),tmp_key_file);
+  //Remove one of the current keys, check you roll back
+  rm_file("ssl_cert.3.certificate");
+  ASSERT_TRUE(cert_mngr.has_matching_keys());
+  ASSERT_TRUE(cert_mngr.has_key_pair_changed());
+  ASSERT_EQ(cert_mngr.get_cur_cert(),tmp_one_cert_file); 
+  ASSERT_EQ(cert_mngr.get_cur_key(),tmp_one_key_file);
+  //Add new key, check you switch
+  tmp_cert_file = add_file("ssl_cert.4.certificate");
+  tmp_key_file = add_file("ssl_cert.4.private_key");
+  ASSERT_TRUE(cert_mngr.has_matching_keys());
+  ASSERT_TRUE(cert_mngr.has_key_pair_changed());
+  ASSERT_EQ(cert_mngr.get_cur_cert(),tmp_cert_file); 
+  ASSERT_EQ(cert_mngr.get_cur_key(),tmp_key_file);
+  //Now reject those keys and check you rolled back 
+  cert_mngr.reject_keys();
+  ASSERT_TRUE(cert_mngr.has_matching_keys());
+  ASSERT_TRUE(cert_mngr.has_key_pair_changed());
+  ASSERT_EQ(cert_mngr.get_cur_cert(),tmp_one_cert_file); 
+  ASSERT_EQ(cert_mngr.get_cur_key(),tmp_one_key_file);
+  //Modify the keys you rejected and check that you use them
+  sleep(1);
+  tmp_cert_file = add_file("ssl_cert.4.certificate");
+  tmp_key_file = add_file("ssl_cert.4.private_key");
+  ASSERT_TRUE(cert_mngr.has_matching_keys());
+  ASSERT_TRUE(cert_mngr.has_key_pair_changed());
+  ASSERT_EQ(cert_mngr.get_cur_cert(),tmp_cert_file); 
+  ASSERT_EQ(cert_mngr.get_cur_key(),tmp_key_file);
+
+}
+
 class ScanHeaderTest : public ::testing::Test {
   protected:
     ScanHeaderTest() {
@@ -313,7 +449,7 @@ class PeersTest : public ::testing::Test {
     PeersTest() {
       DataBattery::Settings db_settings("ct",FLAGS_db_hostname,"443",
           "dcurrie_testnet_kdc_ca.crt.pem", "dcurrie_testnet_kdc_ca.key.pem", 
-          "../../test/akamai_testdata/",
+          "TEST_INPUTS/",
           5,0,FLAGS_db_preface);
       _db = new DataBatteryTest(db_settings,&_table_key_value);
       _pending_table = "test_pending";
@@ -556,7 +692,7 @@ class CertTablesTest : public ::testing::Test {
       //Common db settings
       DataBattery::Settings db_settings("ct",FLAGS_db_hostname,"443",
           "dcurrie_testnet_kdc_ca.crt.pem",
-          "dcurrie_testnet_kdc_ca.key.pem","../../test/akamai_testdata/", 5,0,FLAGS_db_preface);
+          "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface);
       //Test config
       ct::AkamaiConfig test_config;
       test_config.set_db_max_entry_size(7000);
@@ -665,7 +801,7 @@ class DBTest : public ::testing::Test {
     DBTest() {
       DataBattery::Settings db_settings("ct",FLAGS_db_hostname,"443",
           "dcurrie_testnet_kdc_ca.crt.pem",
-          "dcurrie_testnet_kdc_ca.key.pem","../../test/akamai_testdata/", 5,0,FLAGS_db_preface);
+          "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface);
       _db = new DataBattery(db_settings);
       _leaves_table = "test_leaves";
       _pending_table = "test_pending";
@@ -734,7 +870,7 @@ TEST_F(DBTest,DBSetup) {
   //Incorrect app, so data battery returns 404
   DataBattery::Settings db_settings("foo",FLAGS_db_hostname,"443",
       "dcurrie_testnet_kdc_ca.crt.pem",
-      "dcurrie_testnet_kdc_ca.key.pem","../../test/akamai_testdata/", 5,0,FLAGS_db_preface);
+      "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface);
   DataBattery* local_db = new DataBattery(db_settings);
   string value("Blank");
   ASSERT_FALSE(local_db->GET(_leaves_table,"0",value));
@@ -743,7 +879,7 @@ TEST_F(DBTest,DBSetup) {
   //Incorrect hostname
   DataBattery::Settings db_settings2("ct","broken.hostname.com","443",
       "dcurrie_testnet_kdc_ca.crt.pem",
-      "dcurrie_testnet_kdc_ca.key.pem","../../test/akamai_testdata/", 5,0,FLAGS_db_preface);
+      "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface);
   local_db = new DataBattery(db_settings2);
   ASSERT_FALSE(local_db->GET(_leaves_table,"0",value));
   ASSERT_EQ(local_db->get_error_status(),-1);
@@ -751,7 +887,7 @@ TEST_F(DBTest,DBSetup) {
   //Wrong port
   DataBattery::Settings db_settings3("ct",FLAGS_db_hostname,"445",
       "dcurrie_testnet_kdc_ca.crt.pem",
-      "dcurrie_testnet_kdc_ca.key.pem","../../test/akamai_testdata/", 5,0,FLAGS_db_preface);
+      "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface);
   local_db = new DataBattery(db_settings3);
   ASSERT_FALSE(local_db->GET(_leaves_table,"0",value));
   ASSERT_EQ(local_db->get_error_status(),-1);
@@ -759,14 +895,14 @@ TEST_F(DBTest,DBSetup) {
   //Bad key location
   DataBattery::Settings db_settings4("ct",FLAGS_db_hostname,"443",
       "dcurrie_testnet_kdc_ca.crt.pem",
-      "dcurrie_testnet_kdc_ca.key.pem","../../test/akamai_testdat/", 0,0,FLAGS_db_preface);
+      "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 0,0,FLAGS_db_preface);
   local_db = new DataBattery(db_settings4);
   ASSERT_FALSE(local_db->is_good());
   delete local_db;
   //Wrong user 
   DataBattery::Settings db_settings5("ct",FLAGS_db_hostname,"443",
       "bogus_testnet_kdc_ca.crt.pem",
-      "bogus_testnet_kdc_ca.key.pem","../../test/akamai_testdata/",5,0,FLAGS_db_preface);
+      "bogus_testnet_kdc_ca.key.pem",TEST_INPUTS,5,0,FLAGS_db_preface);
   local_db = new DataBattery(db_settings5);
   ASSERT_FALSE(local_db->GET(_leaves_table,"0",value));
   ASSERT_EQ(local_db->get_error_status(),403);
@@ -774,7 +910,7 @@ TEST_F(DBTest,DBSetup) {
   //Key signed by the wrong CA, not accepted by DataBattery
   DataBattery::Settings db_settings6("ct",FLAGS_db_hostname,"443",
       "bogus2_testnet_kdc_ca.crt.pem",
-      "bogus2_testnet_kdc_ca.key.pem","../../test/akamai_testdata/",5,0,FLAGS_db_preface);
+      "bogus2_testnet_kdc_ca.key.pem",TEST_INPUTS,5,0,FLAGS_db_preface);
   local_db = new DataBattery(db_settings6);
   ASSERT_FALSE(local_db->GET(_leaves_table,"0",value));
   ASSERT_EQ(local_db->get_error_status(),-1);

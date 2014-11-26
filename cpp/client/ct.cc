@@ -683,15 +683,17 @@ static int CheckConsistency() {
   ct::SignedTreeHead sth2;
   CHECK(sth2.ParseFromString(sth2_str));
 
-  std::vector<string> proof;
-  CHECK_EQ(AsyncLogClient::OK,
-           client.GetSTHConsistency(sth1.tree_size(), sth2.tree_size(),
-                                    &proof));
+  if (sth1.tree_size() != sth2.tree_size()) {
+    std::vector<string> proof;
+    CHECK_EQ(AsyncLogClient::OK,
+        client.GetSTHConsistency(sth1.tree_size(), sth2.tree_size(),
+          &proof));
 
-  if (!verifier->VerifyConsistency(sth1, sth2, proof)) {
-    LOG(ERROR) << "Consistency proof does not verify";
-    delete verifier;
-    return 1;
+    if (!verifier->VerifyConsistency(sth1, sth2, proof)) {
+      LOG(ERROR) << "Consistency proof does not verify";
+      delete verifier;
+      return 1;
+    }
   }
 
   LOG(INFO) << "Consistency proof verifies";
