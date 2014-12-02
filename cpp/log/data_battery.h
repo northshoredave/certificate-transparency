@@ -224,13 +224,11 @@ namespace Akamai {
       struct Settings {
         Settings(std::string app, std::string host, std::string serv, std::string cert, 
             std::string pvkey, std::string cert_dir, uint32_t key_sleep, 
-            uint32_t cert_key_check_delay, std::string preface)
-          : _app(app) , _host(host) , _serv(serv) , _cert(cert) , _pvkey(pvkey), _preface(preface)
-          , _cert_dir(cert_dir)
-          , _key_sleep(key_sleep), _cert_key_check_delay(cert_key_check_delay)
-        {}
+            uint32_t cert_key_check_delay, std::string preface, std::string test_table, std::string test_key);
         std::string _app, _host, _serv, _cert, _pvkey, _preface, _cert_dir;
         uint32_t _key_sleep, _cert_key_check_delay;
+        std::string _test_table, _test_key;
+        std::vector<std::string> _hostnames;
       };
     public:
       DataBattery(const Settings& settings);
@@ -274,6 +272,7 @@ namespace Akamai {
       SSL* ssl_connect();
       void disconnect(SSL* ssl);
       bool check_context();
+      bool check_hostnames();
 
     private:
       Settings _settings;

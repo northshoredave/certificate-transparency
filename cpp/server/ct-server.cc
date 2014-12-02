@@ -8,6 +8,7 @@
 #include <gflags/gflags.h>
 #include <openssl/err.h>
 #include <string>
+#include <vector>
 
 #include "log/cert_checker.h"
 #include "log/cert_submission_handler.h"
@@ -59,7 +60,11 @@ DEFINE_bool(akamai_run,false,"Whether we should do akamai or not");
 DEFINE_bool(akamai_get_roots_from_db,false,"Whether we should attempt to get ca roots from DB");
 DEFINE_string(akamai_db_app,"ct",
              "App name used by databattery for CT");
-DEFINE_string(akamai_db_hostname,"", "Hostname of DataBattery");
+DEFINE_string(akamai_db_hostname,"", 
+    "Space seperated list of hostnames for DataBattery.  To work around bootstrap "
+    "problem of config in databattery, need to be able to give both test and prod."
+    "I'm relying on the keys only working for one instance (test or production to "
+    "distinguish which one we use.");
 DEFINE_string(akamai_db_serv,"443",
               "Port or service for DataBattery");
 DEFINE_string(akamai_db_preface,"","Preface when GET, PUT access DB");
@@ -128,12 +133,12 @@ namespace Akamai {
 
         //thread safety for openssl
         thread_setup();
-        
+
         //First DB instance
         DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
             FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key, 
             FLAGS_akamai_db_cert_dir, FLAGS_akamai_sleep, FLAGS_akamai_cert_check_delay,
-            FLAGS_akamai_db_preface);
+            FLAGS_akamai_db_preface,FLAGS_akamai_db_config_table,FLAGS_akamai_db_config_key);
         DataBattery* cnfg_db = new DataBattery(db_settings);
         CHECK(cnfg_db->is_good()) << "Failed to create DataBattery instance for cnfg_db";
         //Need to query databattery to get max size of a value in DB table and to get config, so use cnfg_db before
@@ -198,7 +203,7 @@ namespace Akamai {
         DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
             FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,
             FLAGS_akamai_db_cert_dir,FLAGS_akamai_sleep, FLAGS_akamai_cert_check_delay,
-            FLAGS_akamai_db_preface);
+            FLAGS_akamai_db_preface,FLAGS_akamai_db_config_table,FLAGS_akamai_db_config_key);
         DataBattery db(db_settings);
         CHECK(db.is_good()) << "Failed to create DataBattery instance for db";
         string data;

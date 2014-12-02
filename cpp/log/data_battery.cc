@@ -10,6 +10,7 @@
 #include "log/cert.h"
 #include <google/protobuf/descriptor.h>
 #include <sys/stat.h>
+#include <boost/tokenizer.hpp>
 
 using namespace Akamai;
 using namespace std;
@@ -300,6 +301,41 @@ bool DataBattery::check_context() {
   return !failed;
 }
 
+bool DataBattery::check_hostnames() { 
+  for (vector<string>::const_iterator sIt = _settings._hostnames.begin(); 
+      sIt != _settings._hostnames.end(); ++sIt) {
+    string value;
+    _settings._host = *sIt;
+    if (GET(_settings._test_table,_settings._test_key,value)) {
+      LOG(INFO) << "DB: Found valid DB hostname " << _settings._host;
+      return true;
+    }
+  }
+  LOG(ERROR) << "DB: Failed to find a valid DB hostname";
+  return false;
+}
+
+DataBattery::Settings::Settings(std::string app, std::string host, std::string serv, std::string cert, 
+          std::string pvkey, std::string cert_dir, uint32_t key_sleep, 
+          uint32_t cert_key_check_delay, std::string preface, std::string test_table, std::string test_key)
+        : _app(app) , _host("empty") , _serv(serv) , _cert(cert) , _pvkey(pvkey), _preface(preface)
+        , _cert_dir(cert_dir)
+        , _key_sleep(key_sleep), _cert_key_check_delay(cert_key_check_delay)
+        , _test_table(test_table), _test_key(test_key)
+{
+  try {
+    typedef boost::tokenizer<boost::char_separator<char> > tokenizer;
+    boost::char_separator<char> sep(" ");
+    tokenizer t(host,sep);
+    for (tokenizer::iterator i = t.begin(); i != t.end(); ++i) {
+      _hostnames.push_back(*i);
+    }
+  } catch (...) {
+    LOG(ERROR) << "Failed to parse hostnames " << host;
+  }
+}
+
+
 DataBattery::DataBattery(const Settings& settings)
         : _settings(settings)
         , _ctx(NULL)
@@ -313,6 +349,7 @@ DataBattery::DataBattery(const Settings& settings)
     _loadlibraries = false;
   }
   check_context();
+  check_hostnames();
 }
 
 int DataBattery::tcp_connect() {

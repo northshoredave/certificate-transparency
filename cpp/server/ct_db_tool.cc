@@ -541,7 +541,7 @@ int main(int argc, char* argv[]) {
 
   DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
     FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key, FLAGS_akamai_db_cert_dir,
-    5,0,FLAGS_akamai_db_preface);
+    5,0,FLAGS_akamai_db_preface,FLAGS_akamai_db_config_table,FLAGS_akamai_db_config_key);
   DataBattery* db = new DataBattery(db_settings);
   CHECK(db->is_good()) << "Failed to create DataBattery instance for db";
 

@@ -19,6 +19,8 @@
 
 DEFINE_string(db_hostname,"","Hostname to access DB");
 DEFINE_string(db_preface,"","Preface when GET, PUT access DB");
+DEFINE_string(db_config_table,"pending","What table to get config from for DB test");
+DEFINE_string(db_config_key,"config","Where to get config from for DB test");
 
 namespace {
 
@@ -358,11 +360,11 @@ TEST_F(DBIndexTest,Keys) {
   ASSERT_EQ((int)keys.size(),1);
   ASSERT_EQ(keys[0],"127.0.0.1.0");
   //Add a key
-  ASSERT_EQ(_db_index.first_key(),2);
-  ASSERT_EQ(_db_index.last_key(),10);
+  ASSERT_EQ(_db_index.first_key(),static_cast<long unsigned int>(2));
+  ASSERT_EQ(_db_index.last_key(),static_cast<long unsigned int>(10));
   string new_key = _db_index.add_key();
   ASSERT_EQ(new_key,"11");
-  ASSERT_EQ(_db_index.last_key(),11);
+  ASSERT_EQ(_db_index.last_key(),static_cast<long unsigned int>(11));
 }
 
 //Stub out the GET and PUT methods to just access a local map.  GET/PUT tested above with true
@@ -449,8 +451,8 @@ class PeersTest : public ::testing::Test {
     PeersTest() {
       DataBattery::Settings db_settings("ct",FLAGS_db_hostname,"443",
           "dcurrie_testnet_kdc_ca.crt.pem", "dcurrie_testnet_kdc_ca.key.pem", 
-          "TEST_INPUTS/",
-          5,0,FLAGS_db_preface);
+          TEST_INPUTS,
+          5,0,FLAGS_db_preface,FLAGS_db_config_table,FLAGS_db_config_key);
       _db = new DataBatteryTest(db_settings,&_table_key_value);
       _pending_table = "test_pending";
       _table_key_value["test_pending"];
@@ -692,7 +694,8 @@ class CertTablesTest : public ::testing::Test {
       //Common db settings
       DataBattery::Settings db_settings("ct",FLAGS_db_hostname,"443",
           "dcurrie_testnet_kdc_ca.crt.pem",
-          "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface);
+          "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface,
+          FLAGS_db_config_table,FLAGS_db_config_key);
       //Test config
       ct::AkamaiConfig test_config;
       test_config.set_db_max_entry_size(7000);
@@ -801,7 +804,8 @@ class DBTest : public ::testing::Test {
     DBTest() {
       DataBattery::Settings db_settings("ct",FLAGS_db_hostname,"443",
           "dcurrie_testnet_kdc_ca.crt.pem",
-          "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface);
+          "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface,
+          FLAGS_db_config_table,FLAGS_db_config_key);
       _db = new DataBattery(db_settings);
       _leaves_table = "test_leaves";
       _pending_table = "test_pending";
@@ -870,7 +874,8 @@ TEST_F(DBTest,DBSetup) {
   //Incorrect app, so data battery returns 404
   DataBattery::Settings db_settings("foo",FLAGS_db_hostname,"443",
       "dcurrie_testnet_kdc_ca.crt.pem",
-      "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface);
+      "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface,
+      FLAGS_db_config_table,FLAGS_db_config_key);
   DataBattery* local_db = new DataBattery(db_settings);
   string value("Blank");
   ASSERT_FALSE(local_db->GET(_leaves_table,"0",value));
@@ -879,7 +884,8 @@ TEST_F(DBTest,DBSetup) {
   //Incorrect hostname
   DataBattery::Settings db_settings2("ct","broken.hostname.com","443",
       "dcurrie_testnet_kdc_ca.crt.pem",
-      "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface);
+      "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface,
+      FLAGS_db_config_table,FLAGS_db_config_key);
   local_db = new DataBattery(db_settings2);
   ASSERT_FALSE(local_db->GET(_leaves_table,"0",value));
   ASSERT_EQ(local_db->get_error_status(),-1);
@@ -887,7 +893,8 @@ TEST_F(DBTest,DBSetup) {
   //Wrong port
   DataBattery::Settings db_settings3("ct",FLAGS_db_hostname,"445",
       "dcurrie_testnet_kdc_ca.crt.pem",
-      "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface);
+      "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 5,0,FLAGS_db_preface,
+      FLAGS_db_config_table,FLAGS_db_config_key);
   local_db = new DataBattery(db_settings3);
   ASSERT_FALSE(local_db->GET(_leaves_table,"0",value));
   ASSERT_EQ(local_db->get_error_status(),-1);
@@ -895,14 +902,16 @@ TEST_F(DBTest,DBSetup) {
   //Bad key location
   DataBattery::Settings db_settings4("ct",FLAGS_db_hostname,"443",
       "dcurrie_testnet_kdc_ca.crt.pem",
-      "dcurrie_testnet_kdc_ca.key.pem",TEST_INPUTS, 0,0,FLAGS_db_preface);
+      "dcurrie_testnet_kdc_ca.key.pem","bogus", 0,0,FLAGS_db_preface,
+      FLAGS_db_config_table,FLAGS_db_config_key);
   local_db = new DataBattery(db_settings4);
   ASSERT_FALSE(local_db->is_good());
   delete local_db;
   //Wrong user 
   DataBattery::Settings db_settings5("ct",FLAGS_db_hostname,"443",
       "bogus_testnet_kdc_ca.crt.pem",
-      "bogus_testnet_kdc_ca.key.pem",TEST_INPUTS,5,0,FLAGS_db_preface);
+      "bogus_testnet_kdc_ca.key.pem",TEST_INPUTS,5,0,FLAGS_db_preface,
+      FLAGS_db_config_table,FLAGS_db_config_key);
   local_db = new DataBattery(db_settings5);
   ASSERT_FALSE(local_db->GET(_leaves_table,"0",value));
   ASSERT_EQ(local_db->get_error_status(),403);
@@ -910,7 +919,8 @@ TEST_F(DBTest,DBSetup) {
   //Key signed by the wrong CA, not accepted by DataBattery
   DataBattery::Settings db_settings6("ct",FLAGS_db_hostname,"443",
       "bogus2_testnet_kdc_ca.crt.pem",
-      "bogus2_testnet_kdc_ca.key.pem",TEST_INPUTS,5,0,FLAGS_db_preface);
+      "bogus2_testnet_kdc_ca.key.pem",TEST_INPUTS,5,0,FLAGS_db_preface,
+      FLAGS_db_config_table,FLAGS_db_config_key);
   local_db = new DataBattery(db_settings6);
   ASSERT_FALSE(local_db->GET(_leaves_table,"0",value));
   ASSERT_EQ(local_db->get_error_status(),-1);
