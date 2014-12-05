@@ -360,6 +360,15 @@ namespace Akamai {
       std::string db_pending() const { getLockMutex(_config.db_pending,std::string); }
       std::string db_root_table() const { getLockMutex(_config.db_root_table,std::string); }
       std::string db_root_key() const { getLockMutex(_config.db_root_key,std::string); }
+      std::string db_app() const { getLockMutex(_config.db_app,std::string); }
+      std::string db_hostname() const { getLockMutex(_config.db_hostname,std::string); }
+      std::string db_serv() const { getLockMutex(_config.db_serv,std::string); }
+      std::string db_preface() const { getLockMutex(_config.db_preface,std::string); }
+      std::string db_cert() const { getLockMutex(_config.db_cert,std::string); }
+      std::string db_key() const { getLockMutex(_config.db_key,std::string); }
+      std::string db_cert_dir() const { getLockMutex(_config.db_cert_dir,std::string); }
+      std::string tableprov_dir() const { getLockMutex(_config.tableprov_dir,std::string); }
+      std::string db_request_bytes() const { getLockMutex(_config.db_request_bytes,std::string); }
       uint64_t fixed_peer_delay() const { getLockMutex(_config.fixed_peer_delay,uint64_t); }
       uint64_t random_peer_delay() const { getLockMutex(_config.random_peer_delay,uint64_t); } 
       uint64_t max_peer_age_removal() const { getLockMutex(_config.max_peer_age_removal,uint64_t); } 
@@ -376,8 +385,10 @@ namespace Akamai {
       uint32_t tree_signing_freq() const { getLockMutex(_config.tree_sign_freq,uint32_t); } 
       uint32_t bucket_time() const { getLockMutex(_config.bucket_time,uint32_t); } 
       uint32_t buffer_safety() const { getLockMutex(_config.buffer_safety,uint32_t); }
+      uint32_t cert_check_delay() const { getLockMutex(_config.cert_check_delay,uint32_t); }
       std::vector<uint32_t> bucket_sets() const { getVLockMutex(_config.bucket_sets,uint32_t); }
       bool publish_cert_info() const { getLockMutex(_config.publish_cert_info,bool); }
+      bool get_roots_from_db() const { getLockMutex(_config.get_roots_from_db,bool); }
       
     private:
       ct::AkamaiConfig _config;
@@ -588,13 +599,9 @@ namespace Akamai {
    *   The thread is the only one who can update config.  Everyone else is read only
    */
   struct config_thread_data {
-    config_thread_data(DataBattery* db, std::string cnfg_file, ConfigData* cd) 
-      : _db(db), _cnfg_file(cnfg_file), _cd(cd)
+    config_thread_data(std::string cnfg_file, ConfigData* cd) 
+      : _cnfg_file(cnfg_file), _cd(cd)
     {}
-    ~config_thread_data() {
-      if (_db) { delete _db; }
-    }
-    DataBattery* _db;
     std::string _cnfg_file;
     uint64_t _max_entry_size;
     ConfigData* _cd;

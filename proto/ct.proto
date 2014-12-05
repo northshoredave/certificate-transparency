@@ -292,4 +292,26 @@ message AkamaiConfig {
   optional uint32 health_check_freq = 22 [ default = 15 ];
   //How often to sign tree
   optional uint32 tree_sign_freq = 23 [ default = 15 ];
+  //App name used by databattery for CT
+  optional string db_app = 24 [ default = "ct" ];
+  //Hostname for DataBattery
+  optional string db_hostname = 25;
+  //Port or service for DataBattery
+  optional string db_serv = 26 [ default = "443" ];
+  //Preface when GET, PUT access DB
+  optional string db_preface = 27;
+  //Cert to use when accessing DataBattery, filename only
+  optional string db_cert = 28;
+  //Key to use when accessing DataBattery, filename only
+  optional string db_key = 29;
+  //What directory to look in for DataBattery cert/key
+  optional string db_cert_dir = 30;
+  //What directory to write query tables in to get picked up by tabelprov
+  optional string tableprov_dir = 31 [ default = "query" ];
+  //name of limit to get max entry value size
+  optional string db_request_bytes = 32 [ default = "request_bytes" ];
+  //How long in seconds to delay between checking if db access cert has changed
+  optional uint32 cert_check_delay = 33 [ default = 600 ]; 
+  //Whether we should attempt to get ca roots from DB
+  optional bool get_roots_from_db = 34 [ default = false ]; 
 }

@@ -57,27 +57,10 @@ DEFINE_int32(tree_signing_frequency_seconds, 600,
              "last signing. Set this well below the MMD to ensure we sign in "
              "a timely manner. Must be greater than 0.");
 DEFINE_bool(akamai_run,false,"Whether we should do akamai or not");
-DEFINE_bool(akamai_get_roots_from_db,false,"Whether we should attempt to get ca roots from DB");
-DEFINE_string(akamai_db_app,"ct",
-             "App name used by databattery for CT");
-DEFINE_string(akamai_db_hostname,"", "Hostname for DataBattery.");
-DEFINE_string(akamai_db_serv,"443",
-              "Port or service for DataBattery");
-DEFINE_string(akamai_db_preface,"","Preface when GET, PUT access DB");
-DEFINE_string(akamai_db_cert,"", "Cert to use when accessing DataBattery, filename only");
-DEFINE_string(akamai_db_key,"", "Key to use when accessing DataBattery, filename only");
-DEFINE_string(akamai_db_cert_dir,"","What directory to look in for DataBattery cert/key");
-DEFINE_string(akamai_db_request_bytes,"request_bytes","name of limit to get max entry value size");
-DEFINE_string(akamai_config_file,"/a/app_metadata/ct_config.prod","Where to get mdt delivered config");
-DEFINE_string(akamai_db_config_table,"pending","What table to get config from.");
-DEFINE_string(akamai_db_config_key,"config","What key to retrieve from config_table");
-DEFINE_string(akamai_use_local_config,"empty","If specified, then use this local version of config instead of getting it from DataBattery");
-DEFINE_string(akamai_tableprov_dir,"query","What directory to write query tables in to get picked up by tabelprov");
+DEFINE_string(akamai_config_file,"/a/app_metadata/ct_config","Where to get mdt delivered config");
 DEFINE_bool(akamai_allow_cert_sub,true,"Whether to allow cert submission (is this a query only ct?)");
 DEFINE_bool(akamai_allow_audit,true,"Whether to allow audit,proof queries?");
 DEFINE_int32(akamai_sleep,5,"How long to sleep when key is missing before trying again");
-DEFINE_int32(akamai_cert_check_delay,600,"How long in seconds to delay between checking if db access cert has changed");
-
 
 namespace libevent = cert_trans::libevent;
 
@@ -106,65 +89,46 @@ namespace Akamai {
           , _cnfgtd(NULL)
       {}
 
-      bool read_config_from_file() {
-        std::ifstream ifs(FLAGS_akamai_use_local_config.c_str());
-        if (ifs.fail()) {
-          LOG(ERROR) << "Failed to read local config file " << FLAGS_akamai_use_local_config;
-          return false; 
-        }
-        google::protobuf::io::IstreamInputStream* ifo =
-          new google::protobuf::io::IstreamInputStream(&ifs);
-        bool success = _cnfgd.parse_from_stream(ifo); 
-        delete ifo;
-        ifs.close();
-        return success;
-      }
-
       void init() 
       {
+        //Before anything else, get the config
+        _cnfgtd = new config_thread_data(FLAGS_akamai_config_file,&_cnfgd);
+        CHECK(create_config_thread(_cnfgtd));
+
         _id = Peers::randByteString(16);
         LOG(INFO) << "New id " << _id;
+
         //Setup query
-        query_interface::init(FLAGS_akamai_tableprov_dir,_id);
+        query_interface::init(_cnfgd.tableprov_dir(),_id);
         query_interface::instance()->get_main_data()->_start_time = time(0);
+        LOG(INFO) << "Set bucket_sets " << _cnfgd.bucket_sets().size() << " bucket_time " 
+          << _cnfgd.bucket_time();
+        query_interface::instance()->req_count_init(_id,_cnfgd.bucket_sets(),
+            _cnfgd.bucket_time());
 
         //thread safety for openssl
         thread_setup();
 
         //First DB instance
-        DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
-            FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key, 
-            FLAGS_akamai_db_cert_dir, FLAGS_akamai_sleep, FLAGS_akamai_cert_check_delay,
-            FLAGS_akamai_db_preface);
-        DataBattery* cnfg_db = new DataBattery(db_settings);
-        CHECK(cnfg_db->is_good()) << "Failed to create DataBattery instance for cnfg_db";
-        //Need to query databattery to get max size of a value in DB table and to get config, so use cnfg_db before
-        // giving it away
-        string value;
-        CHECK(cnfg_db->GETLIMIT(FLAGS_akamai_db_request_bytes,value)) << "Failed to get max value size from DB";
-        uint64_t db_max_entry_size = atoi(value.c_str());
-        _cnfgd.set_db_limit_max_entry_size(db_max_entry_size);
-
-        //Now get the config
-        _cnfgtd = new config_thread_data(cnfg_db,FLAGS_akamai_config_file,&_cnfgd);
-        if (FLAGS_akamai_use_local_config == "empty") {
-          CHECK(create_config_thread(_cnfgtd));
-        } else {
-          CHECK(read_config_from_file());
-        }
-        LOG(INFO) << "Set db_max_entry_size " << _cnfgd.db_max_entry_size();
-
-        //Init some query stuff now that you have config
-        LOG(INFO) << "Set bucket_sets " << _cnfgd.bucket_sets().size() << " bucket_time " << _cnfgd.bucket_time();
-        query_interface::instance()->req_count_init(_id,_cnfgd.bucket_sets(),
-            _cnfgd.bucket_time());
-
-        //DataBattery is owned and deleted by the object it's given to in all cases
+        DataBattery::Settings db_settings(_cnfgd.db_app(),_cnfgd.db_hostname(),
+            _cnfgd.db_serv(), _cnfgd.db_cert(), _cnfgd.db_key(), 
+            _cnfgd.db_cert_dir(), _cnfgd.short_sleep(), _cnfgd.cert_check_delay(),
+            _cnfgd.db_preface());
         DataBattery* ct_db = new DataBattery(db_settings);
+        //DataBattery is owned and deleted by the object it's given to in all cases
         CHECK(ct_db->is_good()) << "Failed to create DataBattery instance for ct_db";
         _cert_tables = new CertTables(ct_db,_id,&_pd,&_ld,&_hbd,&_cnfgd);
         //Don't create a pending index if you don't allow submissions
         if (FLAGS_akamai_allow_cert_sub) { _cert_tables->init_pending_data(&_pd); }
+
+        //Need to query databattery to get max size of a value in DB table and to get config, so borrow
+        //  ct_db
+        string value;
+        CHECK(ct_db->GETLIMIT(_cnfgd.db_request_bytes(),value)) 
+          << "Failed to get max value size from DB";
+        uint64_t db_max_entry_size = atoi(value.c_str());
+        _cnfgd.set_db_limit_max_entry_size(db_max_entry_size);
+        LOG(INFO) << "Set db_max_entry_size " << _cnfgd.db_max_entry_size();
 
         //Create heartbeat thread if you allow submissions
         if (FLAGS_akamai_allow_cert_sub) {
@@ -196,10 +160,10 @@ namespace Akamai {
 
       void get_roots() {
         LOG(INFO) << "Get roots";
-        DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
-            FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,
-            FLAGS_akamai_db_cert_dir,FLAGS_akamai_sleep, FLAGS_akamai_cert_check_delay,
-            FLAGS_akamai_db_preface);
+        DataBattery::Settings db_settings(_cnfgd.db_app(), _cnfgd.db_hostname(),
+            _cnfgd.db_serv(), _cnfgd.db_cert(), _cnfgd.db_key(),
+            _cnfgd.db_cert_dir(), _cnfgd.short_sleep(), _cnfgd.cert_check_delay(),
+            _cnfgd.db_preface());
         DataBattery db(db_settings);
         CHECK(db.is_good()) << "Failed to create DataBattery instance for db";
         string data;
@@ -452,6 +416,12 @@ int main(int argc, char* argv[]) {
   ERR_load_crypto_strings();
   cert_trans::LoadCtExtensions();
 
+  Akamai::main_setup* akamai(NULL);
+  if (FLAGS_akamai_run) { 
+    akamai = new Akamai::main_setup(); 
+    akamai->init();
+  }
+
   EVP_PKEY *pkey = NULL;
   while (ReadPrivateKey(&pkey, FLAGS_key) != cert_trans::util::KEY_OK) {
     LOG(INFO) << "Have not received private key yet sleep";
@@ -459,12 +429,7 @@ int main(int argc, char* argv[]) {
   }
   LogSigner log_signer(pkey);
 
-  Akamai::main_setup* akamai(NULL);
-  if (FLAGS_akamai_run) { 
-    akamai = new Akamai::main_setup(); 
-    akamai->init();
-  }
-  if (FLAGS_akamai_run&&FLAGS_akamai_get_roots_from_db) {
+  if (FLAGS_akamai_run&&akamai->get_config().get_roots_from_db()) {
     //Load roots from DB and write to the file read below.  Avoids changing any CT code in cert_checker.
     akamai->get_roots();
   } 
@@ -543,7 +508,7 @@ int main(int argc, char* argv[]) {
 
   libevent::HttpServer server(*event_base);
   if (FLAGS_akamai_run) {
-    handler.Add(&server,FLAGS_akamai_allow_audit,FLAGS_akamai_allow_cert_sub);
+    handler.Add(&server,FLAGS_akamai_allow_audit, FLAGS_akamai_allow_cert_sub);
   } else {
     handler.Add(&server,true,true);
   }
