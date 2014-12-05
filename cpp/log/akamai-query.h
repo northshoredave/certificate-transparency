@@ -92,12 +92,12 @@ namespace Akamai {
 
   struct ct_main_data_def {
     ct_main_data_def()
-      : _myid(""), _start_time(0), _is_main_ok(true)
+      : _myid(""), _start_time(0), _is_main_ok("ok")
     {}
     std::string _myid;
     time_t _start_time;
     std::string _root_hash;
-    bool _is_main_ok;
+    std::string _is_main_ok;
   };
 
   struct ct_config_data_def {
@@ -171,8 +171,12 @@ namespace Akamai {
       ct_stats_data_def* get_stats_data() { return _stats_data; }
       ct_cert_info_data_def* get_cert_info_data() { return _cert_info_data; }
 
-      bool is_main_ok() const { return _main_data->_is_main_ok; }
-      void set_is_main_ok(bool b) { _main_data->_is_main_ok = b; }
+      bool is_main_ok() const { return _b_main_ok; }
+      void set_is_main_ok(std::string c) { 
+        _b_main_ok = false;
+        if (c == "ok") { _b_main_ok = true; } 
+        _main_data->_is_main_ok = c; 
+      }
 
     private:
       query_interface(std::string tableprov_directory,std::string myid) 
@@ -207,6 +211,10 @@ namespace Akamai {
       std::string _tableprov_directory;
       RequestStats _req_counts;
       ct_main_data_def* _main_data;
+      //Why _b_main_ok?  Because i didn't want to put a string compare into the event handler.  We check
+      //  this value before returning responses to get-sth, etc...  So I just do it once when health check
+      //  update happens.
+      bool _b_main_ok;
       ct_config_data_def* _config_data;
       ct_stats_data_def* _stats_data;
       ct_cert_info_data_def* _cert_info_data;

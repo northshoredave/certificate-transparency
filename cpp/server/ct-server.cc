@@ -60,11 +60,7 @@ DEFINE_bool(akamai_run,false,"Whether we should do akamai or not");
 DEFINE_bool(akamai_get_roots_from_db,false,"Whether we should attempt to get ca roots from DB");
 DEFINE_string(akamai_db_app,"ct",
              "App name used by databattery for CT");
-DEFINE_string(akamai_db_hostname,"", 
-    "Space seperated list of hostnames for DataBattery.  To work around bootstrap "
-    "problem of config in databattery, need to be able to give both test and prod."
-    "I'm relying on the keys only working for one instance (test or production to "
-    "distinguish which one we use.");
+DEFINE_string(akamai_db_hostname,"", "Hostname for DataBattery.");
 DEFINE_string(akamai_db_serv,"443",
               "Port or service for DataBattery");
 DEFINE_string(akamai_db_preface,"","Preface when GET, PUT access DB");
@@ -72,6 +68,7 @@ DEFINE_string(akamai_db_cert,"", "Cert to use when accessing DataBattery, filena
 DEFINE_string(akamai_db_key,"", "Key to use when accessing DataBattery, filename only");
 DEFINE_string(akamai_db_cert_dir,"","What directory to look in for DataBattery cert/key");
 DEFINE_string(akamai_db_request_bytes,"request_bytes","name of limit to get max entry value size");
+DEFINE_string(akamai_config_file,"/a/app_metadata/ct_config.prod","Where to get mdt delivered config");
 DEFINE_string(akamai_db_config_table,"pending","What table to get config from.");
 DEFINE_string(akamai_db_config_key,"config","What key to retrieve from config_table");
 DEFINE_string(akamai_use_local_config,"empty","If specified, then use this local version of config instead of getting it from DataBattery");
@@ -138,7 +135,7 @@ namespace Akamai {
         DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
             FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key, 
             FLAGS_akamai_db_cert_dir, FLAGS_akamai_sleep, FLAGS_akamai_cert_check_delay,
-            FLAGS_akamai_db_preface,FLAGS_akamai_db_config_table,FLAGS_akamai_db_config_key);
+            FLAGS_akamai_db_preface);
         DataBattery* cnfg_db = new DataBattery(db_settings);
         CHECK(cnfg_db->is_good()) << "Failed to create DataBattery instance for cnfg_db";
         //Need to query databattery to get max size of a value in DB table and to get config, so use cnfg_db before
@@ -149,8 +146,7 @@ namespace Akamai {
         _cnfgd.set_db_limit_max_entry_size(db_max_entry_size);
 
         //Now get the config
-        _cnfgtd = new config_thread_data(cnfg_db,FLAGS_akamai_db_config_table,FLAGS_akamai_db_config_key,
-            &_cnfgd);
+        _cnfgtd = new config_thread_data(cnfg_db,FLAGS_akamai_config_file,&_cnfgd);
         if (FLAGS_akamai_use_local_config == "empty") {
           CHECK(create_config_thread(_cnfgtd));
         } else {
@@ -203,7 +199,7 @@ namespace Akamai {
         DataBattery::Settings db_settings(FLAGS_akamai_db_app,FLAGS_akamai_db_hostname,
             FLAGS_akamai_db_serv, FLAGS_akamai_db_cert, FLAGS_akamai_db_key,
             FLAGS_akamai_db_cert_dir,FLAGS_akamai_sleep, FLAGS_akamai_cert_check_delay,
-            FLAGS_akamai_db_preface,FLAGS_akamai_db_config_table,FLAGS_akamai_db_config_key);
+            FLAGS_akamai_db_preface);
         DataBattery db(db_settings);
         CHECK(db.is_good()) << "Failed to create DataBattery instance for db";
         string data;
@@ -234,24 +230,24 @@ namespace Akamai {
 
       CertTables* get_cert_tables() { return _cert_tables; }
       const ConfigData& get_config() const { return _cnfgd; } 
-      void get_stats(ct_stats_data_def* t) {
+      void get_stats(ct_stats_data_def* t) const {
         t->_tree_size = _ld.get_leaves_count();
         t->_leaves_time = _ld.get_timestamp();
         t->_peers_time = _hbd.get_timestamp();
         if (_ctd) { t->_commit_time = _ctd->get_timestamp(); }
         t->_config_time = _cnfgd.get_timestamp();
       }
-      bool is_ok() {
+      string is_ok() const {
         uint64_t current_time = util::TimeInMilliseconds();
         uint64_t max_hb_age = 1000*(_hbd.get_timestamp() + _cnfgd.max_peer_age_suspension());
         if (current_time > max_hb_age) {
           LOG(INFO) << "Main: heartbeat hasn't been updated recently ct:" << current_time << " ha:" << max_hb_age;
-          return false;
+          return "heartbeat_failure";
         }
         uint64_t max_leaves_age = 1000*(_ld.get_timestamp() + 2*_cnfgd.leaves_update_freq());
         if (current_time > max_leaves_age) {
           LOG(INFO) << "Main: leaves haven't been updated recently ct:" << current_time << " la:" << max_leaves_age;
-          return false;
+          return "leaves_failure";
         }
         //Should always both be true or neither
         if (_ctd&&_commit_cert_tables) {
@@ -260,10 +256,10 @@ namespace Akamai {
           uint64_t max_commit_age = 1000*(_ctd->get_timestamp() + 2*(_cnfgd.commit_delay()+peer_delay));
           if (current_time > max_commit_age) {
             LOG(INFO) << "Main: commit hasn't been done recently ct:" << current_time << " ca:" << max_commit_age;
-            return false;
+            return "commit_failure";
           }
         }
-        return true;
+        return "ok";
       }
       void get_config_data(ct_config_data_def* d) {
         _cnfgd.gen_key_values(d->_config_key_value);

@@ -224,11 +224,9 @@ namespace Akamai {
       struct Settings {
         Settings(std::string app, std::string host, std::string serv, std::string cert, 
             std::string pvkey, std::string cert_dir, uint32_t key_sleep, 
-            uint32_t cert_key_check_delay, std::string preface, std::string test_table, std::string test_key);
+            uint32_t cert_key_check_delay, std::string preface);
         std::string _app, _host, _serv, _cert, _pvkey, _preface, _cert_dir;
         uint32_t _key_sleep, _cert_key_check_delay;
-        std::string _test_table, _test_key;
-        std::vector<std::string> _hostnames;
       };
     public:
       DataBattery(const Settings& settings);
@@ -272,7 +270,6 @@ namespace Akamai {
       SSL* ssl_connect();
       void disconnect(SSL* ssl);
       bool check_context();
-      bool check_hostnames();
 
     private:
       Settings _settings;
@@ -326,13 +323,7 @@ namespace Akamai {
         , _db_limit_max_entry_size(5242880)
       { }
       void gen_key_values(std::vector<std::pair<std::string, std::string> >& kv_pairs) const;
-      bool parse_from_string(std::string value) {
-        bool ret(false);
-        pthread_mutex_lock(&_mutex);
-        ret = _config.ParseFromString(value);
-        pthread_mutex_unlock(&_mutex);
-        return ret;
-      }
+      bool parse_from_text_io(std::ifstream& ifs);
       bool parse_from_stream(google::protobuf::io::IstreamInputStream* ifo) {
         return google::protobuf::TextFormat::Parse(ifo,&_config);
       }
@@ -597,15 +588,14 @@ namespace Akamai {
    *   The thread is the only one who can update config.  Everyone else is read only
    */
   struct config_thread_data {
-    config_thread_data(DataBattery* db, std::string table, std::string key, ConfigData* cd) 
-      : _db(db), _table(table), _key(key), _cd(cd)
+    config_thread_data(DataBattery* db, std::string cnfg_file, ConfigData* cd) 
+      : _db(db), _cnfg_file(cnfg_file), _cd(cd)
     {}
     ~config_thread_data() {
       if (_db) { delete _db; }
     }
     DataBattery* _db;
-    std::string _table;
-    std::string _key;
+    std::string _cnfg_file;
     uint64_t _max_entry_size;
     ConfigData* _cd;
   };

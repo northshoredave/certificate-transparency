@@ -11,6 +11,8 @@
 #include <google/protobuf/descriptor.h>
 #include <sys/stat.h>
 #include <boost/tokenizer.hpp>
+#include <iostream>
+#include <fstream>
 
 using namespace Akamai;
 using namespace std;
@@ -301,39 +303,13 @@ bool DataBattery::check_context() {
   return !failed;
 }
 
-bool DataBattery::check_hostnames() { 
-  for (vector<string>::const_iterator sIt = _settings._hostnames.begin(); 
-      sIt != _settings._hostnames.end(); ++sIt) {
-    string value;
-    _settings._host = *sIt;
-    if (GET(_settings._test_table,_settings._test_key,value)) {
-      LOG(INFO) << "DB: Found valid DB hostname " << _settings._host;
-      return true;
-    }
-  }
-  LOG(ERROR) << "DB: Failed to find a valid DB hostname";
-  return false;
-}
-
 DataBattery::Settings::Settings(std::string app, std::string host, std::string serv, std::string cert, 
           std::string pvkey, std::string cert_dir, uint32_t key_sleep, 
-          uint32_t cert_key_check_delay, std::string preface, std::string test_table, std::string test_key)
-        : _app(app) , _host("empty") , _serv(serv) , _cert(cert) , _pvkey(pvkey), _preface(preface)
+          uint32_t cert_key_check_delay, std::string preface)
+        : _app(app) , _host(host) , _serv(serv) , _cert(cert) , _pvkey(pvkey), _preface(preface)
         , _cert_dir(cert_dir)
         , _key_sleep(key_sleep), _cert_key_check_delay(cert_key_check_delay)
-        , _test_table(test_table), _test_key(test_key)
-{
-  try {
-    typedef boost::tokenizer<boost::char_separator<char> > tokenizer;
-    boost::char_separator<char> sep(" ");
-    tokenizer t(host,sep);
-    for (tokenizer::iterator i = t.begin(); i != t.end(); ++i) {
-      _hostnames.push_back(*i);
-    }
-  } catch (...) {
-    LOG(ERROR) << "Failed to parse hostnames " << host;
-  }
-}
+{}
 
 
 DataBattery::DataBattery(const Settings& settings)
@@ -349,7 +325,6 @@ DataBattery::DataBattery(const Settings& settings)
     _loadlibraries = false;
   }
   check_context();
-  check_hostnames();
 }
 
 int DataBattery::tcp_connect() {
@@ -1053,14 +1028,19 @@ void* ConfigUpdate(void* arg) {
   while (1) {
     sleep(sleep_time);
     LOG(INFO) << "ConfigUpdate thread wakeup";
-    string value;
-    if (!cnfgtd->_db->GET_key_from_table(cnfgtd->_table,cnfgtd->_key,cnfgtd->_cd->db_max_entry_size(),value)) {
-      LOG(WARNING) << "Failed to update config";
+    ifstream ifs(cnfgtd->_cnfg_file);
+    if (ifs.fail()) {
+      LOG(WARNING) << "Failed to open cnfg file " << cnfgtd->_cnfg_file;
       sleep_time = cnfgtd->_cd->short_sleep();
     } else {
-      cnfgtd->_cd->parse_from_string(value);
-      cnfgtd->_cd->update_time();
-      sleep_time = cnfgtd->_cd->config_delay();
+      if (!cnfgtd->_cd->parse_from_text_io(ifs)) {
+        LOG(WARNING) << "Failed to parse config file";
+        sleep_time = cnfgtd->_cd->short_sleep();
+      } else {
+        cnfgtd->_cd->update_time();
+        sleep_time = cnfgtd->_cd->config_delay();
+      }
+      ifs.close();
     }
   }
   return NULL;
@@ -1068,15 +1048,23 @@ void* ConfigUpdate(void* arg) {
 
 bool Akamai::create_config_thread(config_thread_data* cnfgtd) {
   //Get it once before starting thread so that you are gauranteed to have it by the time other stuff starts up
-  string value;
-  if (!cnfgtd->_db->GET_key_from_table(cnfgtd->_table,cnfgtd->_key,cnfgtd->_cd->db_max_entry_size(),value)) {
-    LOG(ERROR) << "Failed to get config";
-    return false;
+  while (1) {
+    ifstream ifs(cnfgtd->_cnfg_file);
+    if (ifs.fail()) {
+      LOG(WARNING) << "Failed to open cnfg file " << cnfgtd->_cnfg_file;
+      sleep(cnfgtd->_cd->short_sleep());
+    } else {
+      if (!cnfgtd->_cd->parse_from_text_io(ifs)) {
+        LOG(WARNING) << "Failed to parse config file";
+        ifs.close();
+        sleep(cnfgtd->_cd->short_sleep());
+      } else {
+        ifs.close();
+        break;
+      }
+    }
   }
-  if (!cnfgtd->_cd->parse_from_string(value)) {
-    LOG(ERROR) << "Failed to parse config";
-    return false;
-  }
+
   //Now create thread
   pthread_t t;
   int res;
@@ -1257,6 +1245,17 @@ bool Akamai::create_leaves_thread(leaves_thread_data* ltd) {
   }
   LOG(INFO) << "create_leaves_thread exit";
   return true;
+}
+
+bool ConfigData::parse_from_text_io(std::ifstream& ifs) {
+  bool ret(false);
+  pthread_mutex_lock(&_mutex);
+  google::protobuf::io::IstreamInputStream* ifo = 
+    new google::protobuf::io::IstreamInputStream(&ifs);
+  ret = google::protobuf::TextFormat::Parse(ifo,&_config);
+  delete ifo;
+  pthread_mutex_unlock(&_mutex);
+  return ret;
 }
 
 void ConfigData::gen_key_values(vector<pair<string, string> >& kv_pairs) const {
