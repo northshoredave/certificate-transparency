@@ -130,6 +130,10 @@ namespace Akamai {
         _cnfgd.set_db_limit_max_entry_size(db_max_entry_size);
         LOG(INFO) << "Set db_max_entry_size " << _cnfgd.db_max_entry_size();
 
+        //Also borrow it to load log cert into databattery if specified
+        //Borrow ct_db to do the DataBattery stuff
+        if (_cnfgd.log_cert() != "empty") { save_log_cert_to_db(ct_db); }
+
         //Create heartbeat thread if you allow submissions
         if (FLAGS_akamai_allow_cert_sub) {
           DataBattery* hd_db = new DataBattery(db_settings);
@@ -156,6 +160,32 @@ namespace Akamai {
         }
         LOG(INFO) << "Completed intialization";
         //End of commit thread
+      }
+
+      void save_log_cert_to_db(DataBattery* db) {
+        std::ifstream ifs(_cnfgd.log_cert().c_str());
+        if (ifs.fail()) {
+          LOG(ERROR) << "Failed to open cert " << _cnfgd.log_cert();
+          return;
+        }
+        string log_cert_pem;
+        //Reserve adequate space in the string
+        ifs.seekg(0, std::ios::end);
+        log_cert_pem.reserve(ifs.tellg());
+        ifs.seekg(0, std::ios::beg);
+        //Now copy in the file
+        log_cert_pem.assign((std::istreambuf_iterator<char>(ifs)),
+                             std::istreambuf_iterator<char>());
+        ifs.close();
+        //Check that it's a valid cert
+        cert_trans::Cert log_cert(log_cert_pem);
+        if (!log_cert.IsLoaded()) {
+          LOG(ERROR) << "Failed to load a valid cert " << _cnfgd.log_cert();
+          return;
+        }
+        //Write it to DB
+        CHECK(db->PUT(_cnfgd.db_pending(),_cnfgd.log_cert_key(),log_cert_pem));
+        LOG(INFO) << "Wrote public cert to DB";
       }
 
       void get_roots() {

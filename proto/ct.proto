@@ -314,4 +314,8 @@ message AkamaiConfig {
   optional uint32 cert_check_delay = 33 [ default = 600 ]; 
   //Whether we should attempt to get ca roots from DB
   optional bool get_roots_from_db = 34 [ default = false ]; 
+  //What the log cert name is, should be stored in the same directory as db_cert_dir
+  optional string log_cert = 35 [ default = "empty" ];
+  //What key to store the log_cert to in the pending table
+  optional string log_cert_key = 36 [ default = "log_cert" ];
 }

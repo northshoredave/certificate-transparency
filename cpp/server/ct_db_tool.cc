@@ -66,6 +66,8 @@ DEFINE_string(akamai_dump_leaves,"empty","Dump the leaves in serialized form to 
 DEFINE_string(akamai_read_leaves,"empty","Read leaves from file and load into DataBattery.");
 DEFINE_string(akamai_dump_pending,"empty","Dump the pending in serialized form to a file.  The file could then be read by another tool, or if we ever move to another database");
 DEFINE_string(akamai_read_pending,"empty","Read pending from file and load into DataBattery.");
+DEFINE_string(akamai_log_cert,"empty","Write log cert to this file");
+DEFINE_string(akamai_log_cert_key,"log_cert","What key to retrieve log_cert from");
 
 //CHECKPOINTING options.  Almost a seperate tool, but let's keep it all fun in the family
 DEFINE_bool(run_checkpointer,false,"Go into checkpointing loop");
@@ -512,28 +514,24 @@ void check_point_loop(DataBattery* db, ConfigData& cnfg) {
   }
 }
 
+void print_log_cert(DataBattery* db) {
+  std::string value;
+  if (!db->GET(FLAGS_akamai_db_pending,FLAGS_akamai_log_cert_key,value)) {
+    LOG(ERROR) << "Unable to retrieve key " << FLAGS_akamai_log_cert_key;
+    return;
+  }
+  std::ofstream ofs(FLAGS_akamai_log_cert.c_str());
+  if (ofs.fail()) {
+    LOG(ERROR) << "Failed to open file " << FLAGS_akamai_log_cert;
+    return;
+  }
+  ofs << value;
+  ofs.close();
+}
+
 int main(int argc, char* argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
-
-  /*
-  CertManager cm(FLAGS_akamai_db_cert_dir, FLAGS_akamai_db_cert, FLAGS_akamai_db_key);
-  //CertManager cm("/home/dcurrie/clients/dcurrie_ct2.0.clean/CertificateTransparency/tmp/","ssl_cert\\.([0-9]+)\\.certificate","ssl_cert\\.([0-9]+)\\.private_key");
-  while (1) {
-    cm.has_matching_keys();
-    if (cm.has_key_pair_changed()) {
-      LOG(INFO) << "Key has changed";
-      if (cm.get_cur_cert() == "test.5.certificate") {
-        cm.reject_keys();
-      }
-    } else {
-      LOG(INFO) << "No key change";
-    }
-    sleep(10);
-  }
-
-  exit(1);
-  */
 
   OpenSSL_add_all_algorithms();
   ERR_load_crypto_strings();
@@ -567,6 +565,7 @@ int main(int argc, char* argv[]) {
   if (FLAGS_akamai_submit_root_ca != "empty") { submit_root_ca(db,FLAGS_akamai_submit_root_ca); }
   if (FLAGS_akamai_print_root_ca) { print_root_ca(db); }
   if (FLAGS_akamai_dump_root_ca != "empty") { dump_root_ca(db); }
+  if (FLAGS_akamai_log_cert != "empty") { print_log_cert(db); }
 
   //These create certtables which owns db, so don't free again, just return
   if (FLAGS_akamai_dump_leaves != "empty") { 
