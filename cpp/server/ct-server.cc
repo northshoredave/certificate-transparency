@@ -163,7 +163,7 @@ namespace Akamai {
       }
 
       void save_log_cert_to_db(DataBattery* db) {
-        string log_cert_file = _cnfgd.db_cert_dir()+_cnfgd.log_cert();
+        string log_cert_file = _cnfgd.log_cert_dir()+_cnfgd.log_cert();
         std::ifstream ifs(log_cert_file.c_str());
         if (ifs.fail()) {
           LOG(ERROR) << "Failed to open cert " << _cnfgd.log_cert();
