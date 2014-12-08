@@ -163,7 +163,8 @@ namespace Akamai {
       }
 
       void save_log_cert_to_db(DataBattery* db) {
-        std::ifstream ifs(_cnfgd.log_cert().c_str());
+        string log_cert_file = _cnfgd.db_cert_dir()+_cnfgd.log_cert();
+        std::ifstream ifs(log_cert_file.c_str());
         if (ifs.fail()) {
           LOG(ERROR) << "Failed to open cert " << _cnfgd.log_cert();
           return;
@@ -446,17 +447,18 @@ int main(int argc, char* argv[]) {
   ERR_load_crypto_strings();
   cert_trans::LoadCtExtensions();
 
+  EVP_PKEY *pkey = NULL;
+  while (ReadPrivateKey(&pkey, FLAGS_key) != cert_trans::util::KEY_OK) {
+    LOG(INFO) << "Have not received private key yet sleep";
+    sleep(FLAGS_akamai_sleep);
+  }
+
   Akamai::main_setup* akamai(NULL);
   if (FLAGS_akamai_run) { 
     akamai = new Akamai::main_setup(); 
     akamai->init();
   }
 
-  EVP_PKEY *pkey = NULL;
-  while (ReadPrivateKey(&pkey, FLAGS_key) != cert_trans::util::KEY_OK) {
-    LOG(INFO) << "Have not received private key yet sleep";
-    sleep(FLAGS_akamai_sleep);
-  }
   LogSigner log_signer(pkey);
 
   if (FLAGS_akamai_run&&akamai->get_config().get_roots_from_db()) {
