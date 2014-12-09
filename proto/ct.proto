@@ -317,7 +317,9 @@ message AkamaiConfig {
   //What the log cert name is, should be stored in the same directory as db_cert_dir
   optional string log_cert = 35 [ default = "empty" ];
   //What key to store the log_cert to in the pending table
-  optional string log_cert_key = 36 [ default = "log_cert" ];
+  optional string log_cert_db_key = 36 [ default = "log_cert" ];
   //Where to find the log_cert
   optional string log_cert_dir = 37 [ default = "ct_signer" ];
+  //What is the name of the private log key
+  optional string log_key = 38;
 }

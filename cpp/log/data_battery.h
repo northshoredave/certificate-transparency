@@ -370,7 +370,8 @@ namespace Akamai {
       std::string tableprov_dir() const { getLockMutex(_config.tableprov_dir,std::string); }
       std::string db_request_bytes() const { getLockMutex(_config.db_request_bytes,std::string); }
       std::string log_cert() const { getLockMutex(_config.log_cert,std::string); }
-      std::string log_cert_key() const { getLockMutex(_config.log_cert_key,std::string); }
+      std::string log_key() const { getLockMutex(_config.log_key,std::string); }
+      std::string log_cert_db_key() const { getLockMutex(_config.log_cert_db_key,std::string); }
       std::string log_cert_dir() const { getLockMutex(_config.log_cert_dir,std::string); }
       uint64_t fixed_peer_delay() const { getLockMutex(_config.fixed_peer_delay,uint64_t); }
       uint64_t random_peer_delay() const { getLockMutex(_config.random_peer_delay,uint64_t); } 

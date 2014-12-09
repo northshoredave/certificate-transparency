@@ -90,8 +90,7 @@ namespace Akamai {
           , _cnfgtd(NULL)
       {}
 
-      void init() 
-      {
+      void load_config() {
         //Before anything else, get the config
         //First see if you need to get static config
         bool got_static_config = read_config(FLAGS_akamai_static_config_file,&_cnfgd); 
@@ -99,7 +98,10 @@ namespace Akamai {
         _cnfgtd = new config_thread_data(FLAGS_akamai_config_file,&_cnfgd,
             got_static_config);
         CHECK(create_config_thread(_cnfgtd));
+      }
 
+      void init() 
+      {
         _id = Peers::randByteString(16);
         LOG(INFO) << "New id " << _id;
 
@@ -190,7 +192,7 @@ namespace Akamai {
           return;
         }
         //Write it to DB
-        CHECK(db->PUT(_cnfgd.db_pending(),_cnfgd.log_cert_key(),log_cert_pem));
+        CHECK(db->PUT(_cnfgd.db_pending(),_cnfgd.log_cert_db_key(),log_cert_pem));
         LOG(INFO) << "Wrote public cert to DB";
       }
 
@@ -452,23 +454,25 @@ int main(int argc, char* argv[]) {
   ERR_load_crypto_strings();
   cert_trans::LoadCtExtensions();
 
-  EVP_PKEY *pkey = NULL;
-  while (ReadPrivateKey(&pkey, FLAGS_key) != cert_trans::util::KEY_OK) {
-    LOG(INFO) << "Have not received private key yet sleep";
-    sleep(FLAGS_akamai_sleep);
-  }
-
+  string log_key = FLAGS_key;
   Akamai::main_setup* akamai(NULL);
   if (FLAGS_akamai_run) { 
     akamai = new Akamai::main_setup(); 
-    akamai->init();
+    akamai->load_config();
+    log_key = akamai->get_config().log_cert_dir()+akamai->get_config().log_key();
   }
 
+  EVP_PKEY *pkey = NULL;
+  while (ReadPrivateKey(&pkey, log_key) != cert_trans::util::KEY_OK) {
+    LOG(INFO) << "Have not received private key yet sleep";
+    sleep(FLAGS_akamai_sleep);
+  }
   LogSigner log_signer(pkey);
 
-  if (FLAGS_akamai_run&&akamai->get_config().get_roots_from_db()) {
+  if (FLAGS_akamai_run) {
+    akamai->init();
     //Load roots from DB and write to the file read below.  Avoids changing any CT code in cert_checker.
-    akamai->get_roots();
+    if (akamai->get_config().get_roots_from_db()) { akamai->get_roots(); }
   } 
   CertChecker checker;
   CHECK(checker.LoadTrustedCertificates(FLAGS_trusted_cert_file))
