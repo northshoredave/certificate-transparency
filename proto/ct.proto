@@ -253,25 +253,25 @@ message AkamaiConfig {
    */
   optional uint64 db_max_entry_size = 3 [ default = 0 ];
   //Fixed wait time in seconds added to random time to verify that peer update was successfull
-  optional uint64 fixed_peer_delay = 4 [ default = 3 ];
+  optional uint64 fixed_peer_delay = 4 [ default = 43200 ];
   //Random wait time in seconds added to fixed time to verify that peer update was successfull
-  optional uint64 random_peer_delay = 5 [ default = 3 ];
+  optional uint64 random_peer_delay = 5 [ default = 60 ];
   //Maximum age in seconds of peers last update before it is removed
   optional uint64 max_peer_age_removal = 6 [ default = 86400 ];
   //Max age in seconds of last peer update before you should stop answering queries
-  optional uint64 max_peer_age_suspension = 7 [ default = 600 ];
+  optional uint64 max_peer_age_suspension = 7 [ default = 900 ];
   //How often to beat.  I.e. how often to update your peer timestamp
-  optional uint64 heartbeat_freq = 8 [ default = 10 ];
+  optional uint64 heartbeat_freq = 8 [ default = 300 ];
   //How often to update the leaves from DataBattery
-  optional uint64 leaves_update_freq = 9 [ default = 20 ];
+  optional uint64 leaves_update_freq = 9 [ default = 3600 ];
   //Minimum age of pending cert in seconds before it can be committed to the leaves table
-  optional uint64 cert_min_age = 10 [ default = 10 ];
+  optional uint64 cert_min_age = 10 [ default = 43200 ];
   //How often to try and commit pending certs (in seconds).  Added to the peer delay.
-  optional uint64 commit_delay = 11 [ default = 10 ];
+  optional uint64 commit_delay = 11 [ default = 21600 ];
   //Delay added to commit delay (in seconds).  Determines how long to wait between committing pending certs
-  optional uint64 commit_peer_delay = 12 [default = 10 ];
+  optional uint64 commit_peer_delay = 12 [default = 60 ];
   //How often to check for new config
-  optional uint64 config_delay = 13 [ default = 30 ];
+  optional uint64 config_delay = 13 [ default = 300 ];
   //How long to sleep in threads when some error occurs before trying again
   optional uint64 short_sleep = 14 [ default = 5 ];
   //How often to update query tables
@@ -301,13 +301,13 @@ message AkamaiConfig {
   //Preface when GET, PUT access DB
   optional string db_preface = 27;
   //Cert to use when accessing DataBattery, filename only
-  optional string db_cert = 28;
+  optional string db_cert = 28 [ default = "ssl_cert\\.([0-9]+)\\.certificate" ];
   //Key to use when accessing DataBattery, filename only
-  optional string db_key = 29;
+  optional string db_key = 29 [ default = "ssl_cert\\.([0-9]+)\\.private_key" ];
   //What directory to look in for DataBattery cert/key
-  optional string db_cert_dir = 30;
+  optional string db_cert_dir = 30 [ default = "/a/secrets/app/ssl_cert/" ];
   //What directory to write query tables in to get picked up by tabelprov
-  optional string tableprov_dir = 31 [ default = "query" ];
+  optional string tableprov_dir = 31 [ default = "/a/provide_to_query" ];
   //name of limit to get max entry value size
   optional string db_request_bytes = 32 [ default = "request_bytes" ];
   //How long in seconds to delay between checking if db access cert has changed
@@ -315,11 +315,11 @@ message AkamaiConfig {
   //Whether we should attempt to get ca roots from DB
   optional bool get_roots_from_db = 34 [ default = false ]; 
   //What the log cert name is, should be stored in the same directory as db_cert_dir
-  optional string log_cert = 35 [ default = "empty" ];
+  optional string log_cert = 35 [ default = "ct_signer\\.([0-9]+)\\.certificate" ];
   //What key to store the log_cert to in the pending table
   optional string log_cert_db_key = 36 [ default = "log_cert" ];
   //Where to find the log_cert
-  optional string log_cert_dir = 37 [ default = "ct_signer" ];
+  optional string log_cert_dir = 37 [ default = "/a/secrets/app/ct_signer/" ];
   //What is the name of the private log key
-  optional string log_key = 38;
+  optional string log_key = 38 [ default = "ct_signer\\.([0-9]+)\\.private_key" ];
 }
