@@ -602,13 +602,15 @@ namespace Akamai {
    *   The thread is the only one who can update config.  Everyone else is read only
    */
   struct config_thread_data {
-    config_thread_data(std::string cnfg_file, ConfigData* cd) 
-      : _cnfg_file(cnfg_file), _cd(cd)
+    config_thread_data(std::string cnfg_file, ConfigData* cd, bool got_static_config) 
+      : _cnfg_file(cnfg_file), _cd(cd), _got_static_config(got_static_config)
     {}
     std::string _cnfg_file;
     uint64_t _max_entry_size;
     ConfigData* _cd;
+    bool _got_static_config;
   };
+  bool read_config(std::string filename, ConfigData* cnfgd);
   bool create_config_thread(config_thread_data* cnfgtd);
 
   /* HeartBeat thread has a single responsibility which is to update the peers.  Specifically it will:

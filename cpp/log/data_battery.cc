@@ -1022,25 +1022,38 @@ bool ScanHeader::process_status(string line) {
   return true;
 }
 
+bool Akamai::read_config(string filename, ConfigData* cnfgd) {
+  ifstream ifs(filename);
+  if (ifs.fail()) {
+    LOG(WARNING) << "Failed to open config file " << filename;
+    ifs.close();
+    return false;
+  } else {
+    if (!cnfgd->parse_from_text_io(ifs)) {
+      LOG(WARNING) << "Failed to parse config file";
+      ifs.close();
+      return false;
+    } else {
+      cnfgd->update_time();
+    }
+  }
+  ifs.close();
+  return true;
+}
+
+
 void* ConfigUpdate(void* arg) {
   config_thread_data* cnfgtd = static_cast<config_thread_data*>(arg);
   uint64_t sleep_time = cnfgtd->_cd->config_delay();
   while (1) {
     sleep(sleep_time);
+    sleep_time = cnfgtd->_cd->config_delay();
     LOG(INFO) << "ConfigUpdate thread wakeup";
-    ifstream ifs(cnfgtd->_cnfg_file);
-    if (ifs.fail()) {
-      LOG(WARNING) << "Failed to open cnfg file " << cnfgtd->_cnfg_file;
-      sleep_time = cnfgtd->_cd->short_sleep();
-    } else {
-      if (!cnfgtd->_cd->parse_from_text_io(ifs)) {
-        LOG(WARNING) << "Failed to parse config file";
+    if (!read_config(cnfgtd->_cnfg_file,cnfgtd->_cd)) {
+      //If you don't have static config, sleep a short time and try again
+      if (!cnfgtd->_got_static_config) {
         sleep_time = cnfgtd->_cd->short_sleep();
-      } else {
-        cnfgtd->_cd->update_time();
-        sleep_time = cnfgtd->_cd->config_delay();
       }
-      ifs.close();
     }
   }
   return NULL;
@@ -1049,19 +1062,13 @@ void* ConfigUpdate(void* arg) {
 bool Akamai::create_config_thread(config_thread_data* cnfgtd) {
   //Get it once before starting thread so that you are gauranteed to have it by the time other stuff starts up
   while (1) {
-    ifstream ifs(cnfgtd->_cnfg_file);
-    if (ifs.fail()) {
-      LOG(WARNING) << "Failed to open cnfg file " << cnfgtd->_cnfg_file;
+    if (!read_config(cnfgtd->_cnfg_file,cnfgtd->_cd)) {
+      //If you have static config, you don't have to wait for dynamic config file
+      if (cnfgtd->_got_static_config) { break; }
+      //You don't have static config, so sleep for dynamic
       sleep(cnfgtd->_cd->short_sleep());
     } else {
-      if (!cnfgtd->_cd->parse_from_text_io(ifs)) {
-        LOG(WARNING) << "Failed to parse config file";
-        ifs.close();
-        sleep(cnfgtd->_cd->short_sleep());
-      } else {
-        ifs.close();
-        break;
-      }
+      break;
     }
   }
 

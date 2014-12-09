@@ -58,6 +58,7 @@ DEFINE_int32(tree_signing_frequency_seconds, 600,
              "a timely manner. Must be greater than 0.");
 DEFINE_bool(akamai_run,false,"Whether we should do akamai or not");
 DEFINE_string(akamai_config_file,"/a/app_metadata/ct_config","Where to get mdt delivered config");
+DEFINE_string(akamai_static_config_file,"empty","Workaround for production until I get a proper ump channel.  It will read static config but overwrite it with the dynamic config given by akamai_config_file if present");
 DEFINE_bool(akamai_allow_cert_sub,true,"Whether to allow cert submission (is this a query only ct?)");
 DEFINE_bool(akamai_allow_audit,true,"Whether to allow audit,proof queries?");
 DEFINE_int32(akamai_sleep,5,"How long to sleep when key is missing before trying again");
@@ -92,7 +93,11 @@ namespace Akamai {
       void init() 
       {
         //Before anything else, get the config
-        _cnfgtd = new config_thread_data(FLAGS_akamai_config_file,&_cnfgd);
+        //First see if you need to get static config
+        bool got_static_config = read_config(FLAGS_akamai_static_config_file,&_cnfgd); 
+        //Now fire up the thread looking for dynamic config
+        _cnfgtd = new config_thread_data(FLAGS_akamai_config_file,&_cnfgd,
+            got_static_config);
         CHECK(create_config_thread(_cnfgtd));
 
         _id = Peers::randByteString(16);
