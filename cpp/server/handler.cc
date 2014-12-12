@@ -268,6 +268,11 @@ void HttpHandler::GetEntries(evhttp_request* req) const {
     return SendError(req, HTTP_BADREQUEST,
                      "Missing or invalid \"end\" parameter.");
   }
+  if (end >= tree_size) {
+    return SendError(req, HTTP_BADREQUEST,
+                     "Missing or invalid \"second\" parameter.");
+  }
+
 
   // If a bigger tree size than what we have has been requested, we'll
   // send what we have.
@@ -402,6 +407,10 @@ void HttpHandler::GetConsistency(evhttp_request* req) const {
 
   const int second(GetIntParam(query, "second"));
   if (second < first) {
+    return SendError(req, HTTP_BADREQUEST,
+                     "Missing or invalid \"second\" parameter.");
+  }
+  if (static_cast<uint64_t>(second) >= log_lookup_->GetSTH().tree_size()) {
     return SendError(req, HTTP_BADREQUEST,
                      "Missing or invalid \"second\" parameter.");
   }
