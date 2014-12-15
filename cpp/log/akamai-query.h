@@ -144,6 +144,9 @@ namespace Akamai {
   //interface if we ever move off AppBattery and want to us it in the future.
   class query_interface {
     public:
+      query_interface()
+        : _is_main_ok(false)
+      {}
       //Update a main table that has basic stats on ct instance
       void update_main(const ct_main_data_def* d);
       //Whats in the config (stored in DataBattery)
