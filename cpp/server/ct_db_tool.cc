@@ -256,7 +256,7 @@ void clear_pending(DataBattery* db,set<string>& peer_set) {
 
 void clear_all_pending(DataBattery* db) {
   LOG(INFO) << "clear all pending";
-  Peers p(0,0,0);
+  Peers p(0,0,0,10,1);
   if (!p.GET(db,FLAGS_akamai_db_pending)) {
     LOG(ERROR) << "Failed to get pending";
     return;
@@ -270,7 +270,7 @@ void clear_all_pending(DataBattery* db) {
 
 void clear_removed_pending(DataBattery* db) {
   LOG(INFO) << "clear removed pending";
-  Peers p(0,0,0);
+  Peers p(0,0,0,10,1);
   if (!p.GET(db,FLAGS_akamai_db_pending)) {
     LOG(ERROR) << "Failed to get pending";
     return;
@@ -305,13 +305,13 @@ void clear_removed_pending(DataBattery* db) {
 
 void clear_peers(DataBattery* db) {
   LOG(INFO) << "clear peers";
-  Peers p(0,0,0);
+  Peers p(0,0,0,10,1);
   p.PUT(db,FLAGS_akamai_db_pending);
 }
 
 void print_peers(DataBattery* db) {
   LOG(INFO) << "print peers";
-  Peers p(0,0,0);
+  Peers p(0,0,0,10,1);
   p.GET(db,FLAGS_akamai_db_pending);
   string tmp;
   google::protobuf::TextFormat::PrintToString(p.get_msg(),&tmp);
@@ -345,7 +345,7 @@ void print_index(DataBattery* db,string table) {
 
 void print_pending_indexes(DataBattery* db) {
   LOG(INFO) << "print pending indexes of live peers";
-  Peers p(0,0,0);
+  Peers p(0,0,0,10,1);
   p.GET(db,FLAGS_akamai_db_pending);
   set<string> peer_set;
   p.get_peer_set(peer_set);
@@ -474,7 +474,8 @@ void read_pending(DataBattery* db, ConfigData& cnfg) {
   ifs.close();
 
   //Generate a uuid and add yourself to the peers
-  Peers p(cnfg.fixed_peer_delay(),cnfg.random_peer_delay(),cnfg.max_peer_age_removal());
+  Peers p(cnfg.fixed_peer_delay(),cnfg.random_peer_delay(),cnfg.max_peer_age_removal(),
+      cnfg.max_time_skew(),cnfg.quorum());
   string id = Peers::randByteString(16); 
   p.update_peer(id,db,FLAGS_akamai_db_pending);
 

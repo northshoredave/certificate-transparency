@@ -407,7 +407,7 @@ class DataBatteryTest: public DataBattery {
 class PeersForTest: public Peers {
   public:
     PeersForTest()
-      : Peers(0,0,6) 
+      : Peers(0,0,6,10,1) 
       , _time(0)
       , _first_GET_match(true)
     {}
@@ -584,6 +584,80 @@ TEST_F(PeersTest,ID) {
   ASSERT_EQ((int)id_1.length(),32);
 }
 
+//Want to control time so create a Peers class that controls time
+class QuorumPeersForTest: public Peers {
+  public:
+    QuorumPeersForTest(uint max_time_skew, uint quorum)
+      : Peers(0,0,6,max_time_skew,quorum) 
+      , _time(0)
+    {
+      PUT(NULL,"empty"); //Save something into the database to be retrieved later
+    }
+    virtual uint64_t get_time() const { return _time; }
+    virtual void set_time(uint64_t t) { _time = t; }
+    virtual bool GET(DataBattery* db, std::string tablename) {
+      return parse_from_string(_database);
+    }
+    virtual bool PUT(DataBattery* db, std::string tablename) const {
+      return serialize_to_string(&_database);
+    }
+    bool operator==(const PeersForTest& other) const {
+      if (get_msg().peers_size() != other.get_msg().peers_size()) { return false; }
+      for (int i = 0; i < get_msg().peers_size(); ++i) {
+        if (get_msg().peers(i).timestamp() != other.get_msg().peers(i).timestamp() ||
+            get_msg().peers(i).id() != other.get_msg().peers(i).id()) { 
+          return false;
+        }
+      }
+      return true;
+    }
+
+  private:
+    uint64_t _time;
+    mutable string _database;
+};
+
+//Note that although we actually generate random 128bit strings instead of IPs
+//as identifiers, it's easier to leave them as IPs in the test. 
+class QuorumPeersTest : public ::testing::Test {
+  protected:
+    QuorumPeersTest()
+      : _peers(NULL)
+    {}
+    ~QuorumPeersTest() {
+      if (_peers) { delete _peers; }
+    }
+    void create_peers(uint max_time_skew, uint quorum) {
+      _peers = new QuorumPeersForTest(max_time_skew,quorum);
+    }
+
+    QuorumPeersForTest* _peers;
+};
+
+TEST_F(QuorumPeersTest,quorum) {
+  create_peers(10,2);
+  _peers->set_time(10); 
+  _peers->update_timestamp("A",_peers->get_time());
+  //Need quorum of 2, only have 1 so far
+  ASSERT_FALSE(_peers->check_time());
+  _peers->set_time(13); 
+  _peers->update_timestamp("B",_peers->get_time());
+  //Now have quorum of 2 within 10 of each other
+  ASSERT_TRUE(_peers->check_time());
+  _peers->set_time(22);
+  _peers->update_timestamp("C",_peers->get_time());
+  //Now we are ahead by 9, and the quorum is at 13
+  //Note that had the quorum been left 10 (which also has 2) this would have failed
+  ASSERT_TRUE(_peers->check_time());
+  _peers->set_time(33);
+  _peers->update_timestamp("D",_peers->get_time());
+  //33 is to far from the quorum which is still 13
+  ASSERT_FALSE(_peers->check_time());
+  _peers->update_timestamp("A",34);
+  //Quorum is now 34
+  ASSERT_TRUE(_peers->check_time());
+}
+
 class QueryTest : public ::testing::Test {
   protected:
     QueryTest() 
@@ -701,6 +775,7 @@ class CertTablesTest : public ::testing::Test {
       test_config.set_db_leaves("test_leaves");
       test_config.set_db_pending("test_pending");
       test_config.set_leaves_update_freq(0);
+      test_config.set_quorum(1);
       //Initialize tables in local data maps
       _table_key_value["test_pending"];
       _table_key_value["test_leaves"];
@@ -723,7 +798,8 @@ class CertTablesTest : public ::testing::Test {
         _cert_tablesv.back()->init_pending_data(_pdv.back());
         //Insert new committer into peers
         Peers p(_cnfgdv.back()->fixed_peer_delay(),_cnfgdv.back()->random_peer_delay(),
-            _cnfgdv.back()->max_peer_age_removal());
+            _cnfgdv.back()->max_peer_age_removal(),_cnfgdv.back()->max_time_skew(),
+            _cnfgdv.back()->quorum());
         p.update_peer(_cert_tablesv.back()->get_my_id(),_cert_tablesv.back()->get_db(),
             _cert_tablesv.back()->get_pending_table_name());
       }

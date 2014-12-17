@@ -97,11 +97,11 @@ void Peers::get_removed_peer_set(set<string>& peers,uint age) const {
 //  1) peers:  list of peers which are still alive
 //  2) removed_peers: list of peers which have been declaredy dead  
 void Peers::remove_dead_peers(uint64_t max_age) {
+  uint64_t current_time = get_time();
   //Don't see a way to delete from a list in protobuf so just build up a new object and copy it over to the
   //  permanent one.
   ct::DataBatteryPeers reduced_peers;
   *reduced_peers.mutable_removed_peers() = _peers.removed_peers();
-  uint64_t current_time = get_time();
   for (int i = 0; i < _peers.peers_size(); ++i) {
     const ct::DataBatteryPeers_peer& p = _peers.peers(i);
     //If your timestamp+max_age is still < current_time, then your dead and can be removed
@@ -179,6 +179,38 @@ static uint randLimit(uint lb, uint ub) {
   return lb+static_cast<uint>(rand() * 1.0/RAND_MAX * (ub-lb));
 }
 
+static bool is_within_margin(uint64_t v1, uint64_t v2, uint64_t margin) {
+  if (v1 <= v2 && (v2-v1)<margin) { return true; }
+  if (v1 > v2 && (v1-v2)<margin) { return true; }
+  return false;
+}
+
+struct timeCmp { bool operator()(uint64_t t1, uint64_t t2) { return t1 > t2; } };
+
+uint64_t Peers::find_quorum() const {
+  if (_quorum == 0 || static_cast<uint>(_peers.peers_size()) < _quorum) { return 0; }
+  vector<uint64_t> times;
+  for (int i = 0; i < _peers.peers_size(); ++i) {
+    times.push_back(_peers.peers(i).timestamp());
+  }
+  sort(times.begin(),times.end(),timeCmp());
+  for (vector<uint64_t>::const_iterator candIt = times.begin(); candIt != times.end(); ++candIt) {
+    uint count(0);
+    for (vector<uint64_t>::const_iterator tIt = times.begin(); tIt != times.end(); ++tIt) {
+      if (is_within_margin(*candIt,*tIt,_max_time_skew)) {
+        if (++count >= _quorum) { return *candIt; }
+      }
+    }
+  }
+  return 0;
+}
+
+bool Peers::check_time() {
+  uint64_t quorum_time = find_quorum();
+  if (is_within_margin(quorum_time,get_time(),_max_time_skew)) { return true; }
+  return false;
+}
+
 bool Peers::update_peer(string id, DataBattery* db, string tablename) {
   LOG(INFO) << "PEERS: update_peer " << id << " to table " << tablename;
   //Try to retrieve peers
@@ -187,15 +219,16 @@ bool Peers::update_peer(string id, DataBattery* db, string tablename) {
     //  Otherwise something bad happened, so abort out.
     if (db->get_error_status() != 404) { return false; }
   }
-    
+
+  bool in_quorum = check_time();
   //remove any dead peers while your at it
-  remove_dead_peers(_max_age_removal);
+  if (in_quorum) { remove_dead_peers(_max_age_removal); }
 
   uint64_t current_time = get_time();
   //Now go into loop checking if your in peers with correct timestamp, if not, then add/update and wait.
-  while (!find(id,current_time)) {
-    //Get the most current time
+  while (!find(id,current_time)||!in_quorum) {
     current_time = get_time();
+
     //Add id, or just update it's timestamp if it's already there
     update_timestamp(id,current_time);
 
@@ -208,6 +241,7 @@ bool Peers::update_peer(string id, DataBattery* db, string tablename) {
     sleep(wait_time);
     //Get the peers again
     if (!GET(db,tablename)) { return false; }
+    in_quorum = check_time();
   }
 
   LOG(INFO) << "PEERS: Added peer " << id << " with current_time " << current_time;
@@ -536,7 +570,8 @@ bool CertTables::get_last_leaves(DBIndex& index, ct::LoggedCertificatePBList& le
 }
 
 int CertTables::get_peer_order() {
-  Peers p(_cnfgd->fixed_peer_delay(),_cnfgd->random_peer_delay(),_cnfgd->max_peer_age_removal());
+  Peers p(_cnfgd->fixed_peer_delay(),_cnfgd->random_peer_delay(),_cnfgd->max_peer_age_removal(),
+      _cnfgd->max_time_skew(),_cnfgd->quorum());
 
   if (!get_peers(p)) { return -1; }
   return p.get_order(get_my_id());
@@ -691,7 +726,8 @@ void CertTables::init_pending_data(PendingData* pd) {
  * commit_delay seconds.
  */
 bool CertTables::commit_pending(uint64_t min_age, uint64_t commit_delay) {
-  Peers p(_cnfgd->fixed_peer_delay(),_cnfgd->random_peer_delay(),_cnfgd->max_peer_age_removal());
+  Peers p(_cnfgd->fixed_peer_delay(),_cnfgd->random_peer_delay(),_cnfgd->max_peer_age_removal(),
+      _cnfgd->max_time_skew(),_cnfgd->quorum());
   //Get the peers
   if (!get_peers(p)) { return false; }
   set<string> peers;
@@ -765,7 +801,8 @@ bool CertTables::commit_pending(uint64_t min_age, uint64_t commit_delay) {
 }
 
 void CertTables::get_all_pending(ct::LoggedCertificatePBList& pending_lcpbl) {
-  Peers p(_cnfgd->fixed_peer_delay(),_cnfgd->random_peer_delay(),_cnfgd->max_peer_age_removal());
+  Peers p(_cnfgd->fixed_peer_delay(),_cnfgd->random_peer_delay(),_cnfgd->max_peer_age_removal(),
+      _cnfgd->max_time_skew(),_cnfgd->quorum());
   get_peers(p);
   set<string> peers;
   p.get_peer_set(peers);
@@ -1092,7 +1129,7 @@ void* HeartBeat(void* arg) {
     sleep(sleep_time);
     LOG(INFO) << "HB: thread wakeup";
     Peers p(hbtd->_cnfgd->fixed_peer_delay(),hbtd->_cnfgd->random_peer_delay(),
-        hbtd->_cnfgd->max_peer_age_removal());
+        hbtd->_cnfgd->max_peer_age_removal(),hbtd->_cnfgd->max_time_skew(),hbtd->_cnfgd->quorum());
     if (!p.update_peer(hbtd->_my_id,hbtd->_db,hbtd->_cnfgd->db_pending())) {
       LOG(WARNING) << "HB: Failed to update peer timestamp for id " << hbtd->_my_id;
       sleep_time = hbtd->_cnfgd->short_sleep(); //Sleep for a short time and try again
@@ -1110,7 +1147,7 @@ bool Akamai::create_heartbeat_thread(heartbeat_thread_data* hbtd) {
   //Before starting the thread add the peer to list by calling update_peer.  Doing this outside of thread
   //  so that we block on it for the first add.
   Peers p(hbtd->_cnfgd->fixed_peer_delay(),hbtd->_cnfgd->random_peer_delay(),
-      hbtd->_cnfgd->max_peer_age_removal());
+      hbtd->_cnfgd->max_peer_age_removal(),hbtd->_cnfgd->max_time_skew(),hbtd->_cnfgd->quorum());
   if (!p.update_peer(hbtd->_my_id,hbtd->_db,hbtd->_cnfgd->db_pending())) {
     LOG(ERROR) << "HB: Failed to add peer";
     return false;

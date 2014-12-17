@@ -145,7 +145,7 @@ namespace Akamai {
   class query_interface {
     public:
       query_interface()
-        : _is_main_ok(false)
+        : _b_main_ok(false)
       {}
       //Update a main table that has basic stats on ct instance
       void update_main(const ct_main_data_def* d);

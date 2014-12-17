@@ -322,4 +322,8 @@ message AkamaiConfig {
   optional string log_cert_dir = 37 [ default = "/a/secrets/app/ct_signer/" ];
   //What is the name of the private log key
   optional string log_key = 38 [ default = "ct_signer\\.([0-9]+)\\.private_key" ];
+  //What is the max_time_skew between peer time stamps to allow for quorum in ms
+  optional uint64 max_time_skew = 39 [ default = 3600000 ];
+  //What is the min number of peers that must agree on time for quorum
+  optional uint32 quorum = 40 [ default = 2 ];
 }

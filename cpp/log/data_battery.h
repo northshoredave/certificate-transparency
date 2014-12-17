@@ -384,12 +384,14 @@ namespace Akamai {
       uint64_t commit_peer_delay() const { getLockMutex(_config.commit_peer_delay,uint64_t); } 
       uint64_t config_delay() const { getLockMutex(_config.config_delay,uint64_t); }
       uint64_t short_sleep() const { getLockMutex(_config.short_sleep,uint64_t); }
+      uint64_t max_time_skew() const { getLockMutex(_config.max_time_skew,uint64_t); }
       uint32_t query_freq() const { getLockMutex(_config.query_freq,uint32_t); }
       uint32_t health_check_freq() const { getLockMutex(_config.health_check_freq,uint32_t); }
       uint32_t tree_signing_freq() const { getLockMutex(_config.tree_sign_freq,uint32_t); } 
       uint32_t bucket_time() const { getLockMutex(_config.bucket_time,uint32_t); } 
       uint32_t buffer_safety() const { getLockMutex(_config.buffer_safety,uint32_t); }
       uint32_t cert_check_delay() const { getLockMutex(_config.cert_check_delay,uint32_t); }
+      uint32_t quorum() const { getLockMutex(_config.quorum,uint32_t); }
       std::vector<uint32_t> bucket_sets() const { getVLockMutex(_config.bucket_sets,uint32_t); }
       bool publish_cert_info() const { getLockMutex(_config.publish_cert_info,bool); }
       bool get_roots_from_db() const { getLockMutex(_config.get_roots_from_db,bool); }
@@ -411,16 +413,20 @@ namespace Akamai {
    *  static uint _random_peer_delay: An additional random delay in seconds that is added to the fixed delay to
    *     wait before checking if peers got updated in DataBattery
    *  static uint _max_age_removal: In milliseconds (set converts seconds to milliseconds) before peer is removed.
+   *  static uint _max_time_skew: In milliseconds (how far your time can be off the 'avg' peer time
    *
    *    DataBatteryPeers is a google protobuf.  Look at proto/ct.proto for class definition and member data.
    */
 
   class Peers {
     public:
-      Peers(uint fixed_peer_delay, uint random_peer_delay, uint max_age_removal) 
+      Peers(uint fixed_peer_delay, uint random_peer_delay, uint max_age_removal, uint max_time_skew,
+          uint quorum) 
         : _fixed_peer_delay(fixed_peer_delay)
         , _random_peer_delay(random_peer_delay)
         , _max_age_removal(max_age_removal*1000)
+        , _max_time_skew(max_time_skew)
+        , _quorum(quorum)
       {}
       //Protobuf calls
       bool parse_from_string(std::string data) { return _peers.ParseFromString(data); }
@@ -443,7 +449,7 @@ namespace Akamai {
       bool update_peer(std::string id, DataBattery* db, std::string tablename);
 
       virtual bool GET(DataBattery* db, std::string tablename);
-      bool PUT(DataBattery* db, std::string tablename) const;
+      virtual bool PUT(DataBattery* db, std::string tablename) const;
       //End of methods that actually update DB
       
       const ct::DataBatteryPeers& get_msg() const { return _peers; }
@@ -452,13 +458,18 @@ namespace Akamai {
 
       //Clear removed peers
       void clear_removed_peers(const std::set<std::string>& removed_peer_set);
+
+      bool check_time();
     private:
       virtual uint64_t get_time() const { return util::TimeInMilliseconds(); } 
+      uint64_t find_quorum() const;
     private:
       ct::DataBatteryPeers _peers;
       uint _fixed_peer_delay; //In seconds 
       uint _random_peer_delay; //In seconds
       uint _max_age_removal; //In milliseconds (set converts seconds to milliseconds)
+      uint _max_time_skew; //How far off in milliseconds you are allowed to be from the average peer time
+      uint _quorum; //How many peer times you need for a quorum
   };
 
   //Need to expose when the last successfull heartbeat occured so that we can stop accepting new pending
