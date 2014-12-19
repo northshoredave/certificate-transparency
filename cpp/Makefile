@@ -107,7 +107,7 @@ EXTRA_TESTS = \
 	log/ct_extensions_test \
 	log/frontend_test
 
-all: client/ct server/ct-server server/ct-dns-server tools/dump_cert \
+all: client/ct server/ct-server tools/dump_cert \
      tools/dump_sth server/ct_db_tool
 
 tests: all $(TESTS) $(DISABLED_TESTS) $(EXTRA_TESTS)
@@ -300,6 +300,9 @@ server/ct-server: server/ct-server.o util/read_private_key.o \
 	server/handler.o $(LOCAL_LIBS)
 
 tools/dump_cert: tools/dump_cert.o proto/libproto.a util/libutil.a
+
+install: client/ct server/ct-server
+	install -m 0755 $^ $(COMMON)/bin
 
 server/ct_db_tool: server/ct_db_tool.o $(LOCAL_LIBS)
 
