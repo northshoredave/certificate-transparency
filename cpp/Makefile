@@ -74,7 +74,6 @@ endif
 
 CXXFLAGS = $(INCLUDE) $(CXXFLAG) $(LOCAL_CXXFLAGS)
 
-<<<<<<< HEAD
 # These tests will be built and run automatically.
 TESTS = \
 	log/database_test \
