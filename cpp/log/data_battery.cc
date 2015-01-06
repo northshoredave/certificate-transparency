@@ -208,6 +208,7 @@ uint64_t Peers::find_quorum() const {
 bool Peers::check_time() {
   uint64_t quorum_time = find_quorum();
   if (is_within_margin(quorum_time,get_time(),_max_time_skew)) { return true; }
+  LOG(INFO) << "PEERS: failed quorum check qt:" << quorum_time << " my:" << get_time() << " mts:"<<_max_time_skew;
   return false;
 }
 
