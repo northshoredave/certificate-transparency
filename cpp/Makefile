@@ -84,6 +84,7 @@ TESTS = \
 	log/logged_certificate_test \
 	log/signer_verifier_test \
 	log/tree_signer_test \
+	log/data_battery_test \
 	merkletree/merkle_tree_test \
 	merkletree/serial_hasher_test \
 	merkletree/tree_hasher_test \
@@ -279,7 +280,9 @@ log/logged_certificate_test: log/logged_certificate_test.o proto/libproto.a \
                              util/libutil.a merkletree/libmerkletree.a \
                              $(GTESTLIB)
 
-log/data_battery_test: log/data_battery_test.o log/test_signer.o log/libdatabase.a log/libcert.a \
+log/data_battery_test: log/data_battery_test.o log/data_battery.o log/akamai-query.o \
+                       log/verifier.o log/log_signer.o log/signer.o log/test_signer.o \
+											 log/libdatabase.a log/libcert.a \
                        proto/libproto.a util/libutil.a merkletree/libmerkletree.a \
                        $(GTESTLIB)
 
@@ -318,7 +321,6 @@ test: tests
 	log/ct_extensions_test --test_certs_dir=../test/testdata
 	log/frontend_test --test_certs_dir=../test/testdata
 	rm -rf /tmp/ct-test.$$$$ && mkdir /tmp/ct-test.$$$$ \
-	&& python server/ct-dns-server-test.py /tmp/ct-test.$$$$ \
 	&& rm -rf /tmp/ct-test.$$$$
 
 # Unit tests plus end-to-end tests. Make sure to set up links in test/  first.
