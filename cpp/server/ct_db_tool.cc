@@ -71,7 +71,7 @@ DEFINE_string(akamai_log_cert_key,"log_cert","What key to retrieve log_cert from
 
 //CHECKPOINTING options.  Almost a seperate tool, but let's keep it all fun in the family
 DEFINE_bool(run_checkpointer,false,"Go into checkpointing loop");
-DEFINE_string(dir_name,"checkpoint","What directory to store checkpoints in");
+DEFINE_string(dir_name,"checkpoint/","What directory to store checkpoints in");
 DEFINE_uint64(max_num,1000,"Maximum number of checkpoints you can keep");
 DEFINE_uint64(max_space,1000000000,"Maximum amount of space checkpoints can occupy");
 DEFINE_uint64(max_age,604800,"Maximum age of a checkpoint");
@@ -500,6 +500,7 @@ void check_point_loop(DataBattery* db, ConfigData& cnfg) {
     uint num_of_leaves = ltd._ld->get_hash_size(); 
     leaves_helper(&ltd);
     std::ofstream ofs(string(FLAGS_dir_name+leaves_pb).c_str());
+    LOG(INFO) << "Write leaves to " << FLAGS_dir_name+leaves_pb;
     ld.get_leaves().SerializeToOstream(&ofs);
     ofs.close();
 
