@@ -304,7 +304,7 @@ server/ct-server: server/ct-server.o util/read_private_key.o \
 
 tools/dump_cert: tools/dump_cert.o proto/libproto.a util/libutil.a
 
-install: client/ct server/ct-server
+install: client/ct server/ct-server server/ct_db_tool
 	install -m 0755 $^ $(COMMON)/bin
 
 server/ct_db_tool: server/ct_db_tool.o $(LOCAL_LIBS)
