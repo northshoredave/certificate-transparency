@@ -25,7 +25,9 @@ namespace {
 using namespace std;
 using namespace Akamai;
 
-#define TEST_INPUTS "../../test/akamai_testdata/"
+//Note that this is set to work when be executed from akamake test.  If you want to run it
+//locally you'll have to change it to point to the correct location.
+#define TEST_INPUTS "../../test_keys/"
 
 class CertManagerTest : public ::testing::Test {
   protected:
