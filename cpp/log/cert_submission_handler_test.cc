@@ -60,7 +60,7 @@ class CertSubmissionHandlerTest : public ::testing::Test {
     cert_dir_ = FLAGS_test_certs_dir;
     checker_ = new CertChecker();
     checker_->LoadTrustedCertificates(cert_dir_ + "/" + kCaCert);
-    handler_ = new CertSubmissionHandler(checker_);
+    handler_ = new CertSubmissionHandler(checker_,NULL);
     CHECK(util::ReadBinaryFile(cert_dir_ + "/" + kCaCert, &ca_))
         << "Could not read test data from " << cert_dir_
         << ". Wrong --test_certs_dir?";
@@ -88,7 +88,7 @@ TEST_F(CertSubmissionHandlerTest, SubmitCert) {
   LogEntry entry;
   // Submit a leaf cert.
   EXPECT_EQ(CertSubmissionHandler::OK,
-            handler_->ProcessX509Submission(&submission, &entry));
+            handler_->ProcessX509Submission(&submission, &entry,false));
   EXPECT_TRUE(entry.has_x509_entry());
   EXPECT_FALSE(entry.has_precert_entry());
   EXPECT_TRUE(entry.x509_entry().has_leaf_certificate());
@@ -102,7 +102,7 @@ TEST_F(CertSubmissionHandlerTest, SubmitEmptyCert) {
 
   LogEntry entry;
   EXPECT_EQ(CertSubmissionHandler::EMPTY_SUBMISSION,
-            handler_->ProcessX509Submission(&submission, &entry));
+            handler_->ProcessX509Submission(&submission, &entry,false));
 }
 
 TEST_F(CertSubmissionHandlerTest, SubmitInvalidCert) {
@@ -114,7 +114,7 @@ TEST_F(CertSubmissionHandlerTest, SubmitInvalidCert) {
 
   LogEntry entry;
   EXPECT_EQ(CertSubmissionHandler::EMPTY_SUBMISSION,
-            handler_->ProcessX509Submission(&submission, &entry));
+            handler_->ProcessX509Submission(&submission, &entry,false));
 }
 
 TEST_F(CertSubmissionHandlerTest, SubmitChain) {
@@ -124,7 +124,7 @@ TEST_F(CertSubmissionHandlerTest, SubmitChain) {
 
   LogEntry entry;
   EXPECT_EQ(CertSubmissionHandler::OK,
-            handler_->ProcessX509Submission(&submission, &entry));
+            handler_->ProcessX509Submission(&submission, &entry,false));
   EXPECT_TRUE(entry.x509_entry().has_leaf_certificate());
   EXPECT_EQ(2, entry.x509_entry().certificate_chain_size());
 }
@@ -136,7 +136,7 @@ TEST_F(CertSubmissionHandlerTest, SubmitPartialChain) {
   LogEntry entry;
   // Submit a leaf cert with a missing intermediate.
   EXPECT_EQ(CertSubmissionHandler::UNKNOWN_ROOT,
-            handler_->ProcessX509Submission(&submission, &entry));
+            handler_->ProcessX509Submission(&submission, &entry,false));
 }
 
 TEST_F(CertSubmissionHandlerTest, SubmitInvalidChain) {
@@ -146,7 +146,7 @@ TEST_F(CertSubmissionHandlerTest, SubmitInvalidChain) {
   LogEntry entry;
   // An invalid chain with two certs in wrong order.
   EXPECT_EQ(CertSubmissionHandler::INVALID_CERTIFICATE_CHAIN,
-            handler_->ProcessX509Submission(&submission, &entry));
+            handler_->ProcessX509Submission(&submission, &entry,false));
 }
 
 TEST_F(CertSubmissionHandlerTest, SubmitCertAsPreCert) {
@@ -156,7 +156,7 @@ TEST_F(CertSubmissionHandlerTest, SubmitCertAsPreCert) {
   LogEntry entry;
   // Various things are wrong here, so do not expect a specific error.
   EXPECT_NE(CertSubmissionHandler::OK,
-            handler_->ProcessPreCertSubmission(&submission, &entry));
+            handler_->ProcessPreCertSubmission(&submission, &entry,false));
 }
 
 TEST_F(CertSubmissionHandlerTest, SubmitCertChainAsPreCert) {
@@ -165,7 +165,7 @@ TEST_F(CertSubmissionHandlerTest, SubmitCertChainAsPreCert) {
 
   LogEntry entry;
   EXPECT_NE(CertSubmissionHandler::OK,
-            handler_->ProcessPreCertSubmission(&submission, &entry));
+            handler_->ProcessPreCertSubmission(&submission, &entry,false));
 }
 
 TEST_F(CertSubmissionHandlerTest, SubmitPreCertChain) {
@@ -174,7 +174,7 @@ TEST_F(CertSubmissionHandlerTest, SubmitPreCertChain) {
 
   LogEntry entry;
   EXPECT_EQ(CertSubmissionHandler::OK,
-            handler_->ProcessPreCertSubmission(&submission, &entry));
+            handler_->ProcessPreCertSubmission(&submission, &entry,false));
   EXPECT_TRUE(entry.has_precert_entry());
   EXPECT_FALSE(entry.has_x509_entry());
   EXPECT_TRUE(entry.precert_entry().has_pre_certificate());
@@ -191,7 +191,7 @@ TEST_F(CertSubmissionHandlerTest, SubmitPreCertChainUsingPreCA) {
 
   LogEntry entry;
   EXPECT_EQ(CertSubmissionHandler::OK,
-            handler_->ProcessPreCertSubmission(&submission, &entry));
+            handler_->ProcessPreCertSubmission(&submission, &entry,false));
   EXPECT_TRUE(entry.has_precert_entry());
   EXPECT_FALSE(entry.has_x509_entry());
   EXPECT_TRUE(entry.precert_entry().has_pre_certificate());
@@ -209,7 +209,7 @@ TEST_F(CertSubmissionHandlerTest, SubmitInvalidPreCertChain) {
 
   LogEntry entry;
   EXPECT_NE(CertSubmissionHandler::OK,
-            handler_->ProcessPreCertSubmission(&submission, &entry));
+            handler_->ProcessPreCertSubmission(&submission, &entry,false));
 }
 
 }  // namespace

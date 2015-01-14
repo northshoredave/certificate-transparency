@@ -73,7 +73,7 @@ class FrontendTest : public ::testing::Test {
                                   new MerkleVerifier(new Sha256Hasher()))),
         checker_(),
         frontend_(
-            new FE(new CertSubmissionHandler(&checker_),
+            new FE(new CertSubmissionHandler(&checker_,NULL),
                    new FrontendSigner(db(), TestSigner::DefaultLogSigner()))) {
   }
 
@@ -150,7 +150,7 @@ TYPED_TEST(FrontendTest, TestSubmitValid) {
   EXPECT_TRUE(chain.IsLoaded());
 
   SignedCertificateTimestamp sct;
-  EXPECT_EQ(ADDED, this->frontend_->QueueX509Entry(&chain, &sct));
+  EXPECT_EQ(ADDED, this->frontend_->QueueX509Entry(&chain, &sct,false));
 
   // Look it up and expect to get the right thing back.
   LoggedCertificate logged_cert;
@@ -182,7 +182,7 @@ TYPED_TEST(FrontendTest, TestSubmitValidWithIntermediate) {
   EXPECT_TRUE(chain.IsLoaded());
 
   SignedCertificateTimestamp sct;
-  EXPECT_EQ(ADDED, this->frontend_->QueueX509Entry(&chain, &sct));
+  EXPECT_EQ(ADDED, this->frontend_->QueueX509Entry(&chain, &sct,false));
 
   // Look it up and expect to get the right thing back.
   LoggedCertificate logged_cert;
@@ -223,8 +223,8 @@ TYPED_TEST(FrontendTest, TestSubmitDuplicate) {
   EXPECT_TRUE(chain2.IsLoaded());
 
   SignedCertificateTimestamp sct;
-  EXPECT_EQ(ADDED, this->frontend_->QueueX509Entry(&chain1, NULL));
-  EXPECT_EQ(DUPLICATE, this->frontend_->QueueX509Entry(&chain2, &sct));
+  EXPECT_EQ(ADDED, this->frontend_->QueueX509Entry(&chain1, NULL, false));
+  EXPECT_EQ(DUPLICATE, this->frontend_->QueueX509Entry(&chain2, &sct,false));
 
   // Look it up and expect to get the right thing back.
   LoggedCertificate logged_cert;
@@ -257,7 +257,7 @@ TYPED_TEST(FrontendTest, TestSubmitInvalidChain) {
   SignedCertificateTimestamp sct;
   // Missing intermediate.
   EXPECT_EQ(CERTIFICATE_VERIFY_ERROR,
-            this->frontend_->QueueX509Entry(&chain, &sct));
+            this->frontend_->QueueX509Entry(&chain, &sct,false));
   EXPECT_FALSE(sct.has_signature());
   FE::FrontendStats stats(0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0);
   this->CompareStats(stats);
@@ -271,7 +271,7 @@ TYPED_TEST(FrontendTest, TestSubmitInvalidPem) {
   EXPECT_FALSE(chain.IsLoaded());
 
   SignedCertificateTimestamp sct;
-  EXPECT_EQ(BAD_PEM_FORMAT, this->frontend_->QueueX509Entry(&chain, &sct));
+  EXPECT_EQ(BAD_PEM_FORMAT, this->frontend_->QueueX509Entry(&chain, &sct,false));
   EXPECT_FALSE(sct.has_signature());
   FE::FrontendStats stats(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
   this->CompareStats(stats);
@@ -282,7 +282,7 @@ TYPED_TEST(FrontendTest, TestSubmitPrecert) {
   EXPECT_TRUE(submission.IsLoaded());
 
   SignedCertificateTimestamp sct;
-  EXPECT_EQ(ADDED, this->frontend_->QueuePreCertEntry(&submission, &sct));
+  EXPECT_EQ(ADDED, this->frontend_->QueuePreCertEntry(&submission, &sct,false));
 
   CertChain chain(this->embedded_pem_ + this->ca_pem_);
   LogEntry entry;
@@ -324,7 +324,7 @@ TYPED_TEST(FrontendTest, TestSubmitPrecertUsingPreCA) {
   EXPECT_TRUE(submission.IsLoaded());
 
   SignedCertificateTimestamp sct;
-  EXPECT_EQ(ADDED, this->frontend_->QueuePreCertEntry(&submission, &sct));
+  EXPECT_EQ(ADDED, this->frontend_->QueuePreCertEntry(&submission, &sct,false));
 
   CertChain chain(this->embedded_with_preca_pem_ + this->ca_pem_);
   LogEntry entry;
