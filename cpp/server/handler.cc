@@ -72,7 +72,7 @@ void SendError(evhttp_request* req, int http_status, const string& error_msg) {
   SendJsonReply(req, http_status, json_reply);
 }
 
-bool ExtractChain(evhttp_request* req, CertChain* chain) {
+bool ExtractChain(evhttp_request* req, CertChain* chain,bool& allroots) {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_POST) {
     SendError(req, HTTP_BADMETHOD, "Method not allowed.");
     return false;
@@ -113,13 +113,30 @@ bool ExtractChain(evhttp_request* req, CertChain* chain) {
 
     chain->AddCert(cert);
   }
+  evkeyvalq *req_header = evhttp_request_get_input_headers(req);
+  evkeyval *header;
 
-  LOG(INFO) << "DWC look for allroots";
-  JsonString json_key(json_body,"allroots");
-  if (!json_key.Ok()) {
-    LOG(INFO) << "Allroots not found?";
+  TAILQ_FOREACH(header, req_header, next) {
+    LOG(INFO) << "DWC Header:"<<header->key<<", value " <<header->value;
   }
-  LOG(INFO) << "AllRoots value " << json_key.Value(); 
+
+  req_header = evhttp_request_get_input_headers(req);
+  const char* user_name = evhttp_find_header(req_header,"CommonName");
+  LOG(INFO) << "DWC look for allroots and username:" << user_name;
+  JsonString json_key(json_body,"allroots");
+  allroots = false;
+  if (json_key.Ok()) {
+    LOG(INFO) << "DWC AllRoots value " << json_key.Value(); 
+    //Once again, abusing the query singleton to get the approved user information
+    if (Akamai::query_interface::instance()) {
+      if (Akamai::query_interface::instance()->get_auth_users().find(user_name) !=
+          Akamai::query_interface::instance()->get_auth_users().end()) {
+        LOG(INFO) << "DWC confirm user:" << user_name;
+        allroots = true;
+      }
+    }
+  }
+  LOG(INFO) << "DWC returning all roots " << allroots;
   return true;
 }
 
@@ -378,13 +395,6 @@ void HttpHandler::GetSTH(evhttp_request* req) const {
     Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETSTH);
     if (!Akamai::query_interface::instance()->is_main_ok()) { return SendError(req, HTTP_SERVUNAVAIL, ""); }
   }
-  evkeyvalq *req_header = evhttp_request_get_input_headers(req);
-  evkeyval *header;
-
-  TAILQ_FOREACH(header, req_header, next) {
-    printf("DWC Header: %s, value %s\n",header->key,header->value);
-  }
-
   const SignedTreeHead& sth(log_lookup_->GetSTH());
 
   VLOG(1) << "SignedTreeHead:\n" << sth.DebugString();
@@ -449,11 +459,11 @@ void HttpHandler::AddChain(evhttp_request* req) {
     Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::ADDCHAIN);
     if (!Akamai::query_interface::instance()->is_main_ok()) { return SendError(req, HTTP_SERVUNAVAIL, ""); }
   }
-  if (!ExtractChain(req, chain.get())) {
+  bool allroots = false;
+  if (!ExtractChain(req, chain.get(),allroots)) {
     return;
   }
-
-  pool_->Add(bind(&HttpHandler::BlockingAddChain, this, req, chain));
+  pool_->Add(bind(&HttpHandler::BlockingAddChain, this, req, chain, allroots));
 }
 
 
@@ -463,11 +473,11 @@ void HttpHandler::AddPreChain(evhttp_request* req) {
     Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::ADDPRECHAIN);
     if (!Akamai::query_interface::instance()->is_main_ok()) { return SendError(req, HTTP_SERVUNAVAIL, ""); }
   }
-  if (!ExtractChain(req, chain.get())) {
+  bool allroots = false;
+  if (!ExtractChain(req, chain.get(),allroots)) {
     return;
   }
-
-  pool_->Add(bind(&HttpHandler::BlockingAddPreChain, this, req, chain));
+  pool_->Add(bind(&HttpHandler::BlockingAddPreChain, this, req, chain, allroots));
 }
 
 
@@ -504,20 +514,21 @@ void HttpHandler::BlockingGetEntries(evhttp_request* req, int start,
 
 
 void HttpHandler::BlockingAddChain(evhttp_request* req,
-                                   const shared_ptr<CertChain>& chain) const {
+                                   const shared_ptr<CertChain>& chain,
+                                   bool allroots) const {
   SignedCertificateTimestamp sct;
 
   AddChainReply(req, CHECK_NOTNULL(frontend_)
-                         ->QueueX509Entry(CHECK_NOTNULL(chain.get()), &sct),
+                         ->QueueX509Entry(CHECK_NOTNULL(chain.get()), &sct, allroots),
                 sct);
 }
 
 
 void HttpHandler::BlockingAddPreChain(
-    evhttp_request* req, const shared_ptr<PreCertChain>& chain) const {
+    evhttp_request* req, const shared_ptr<PreCertChain>& chain,bool allroots) const {
   SignedCertificateTimestamp sct;
 
   AddChainReply(req, CHECK_NOTNULL(frontend_)
-                         ->QueuePreCertEntry(CHECK_NOTNULL(chain.get()), &sct),
+                         ->QueuePreCertEntry(CHECK_NOTNULL(chain.get()), &sct, allroots),
                 sct);
 }

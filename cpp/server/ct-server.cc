@@ -273,6 +273,9 @@ namespace Akamai {
       void get_config_data(ct_config_data_def* d) {
         _cnfgd.gen_key_values(d->_config_key_value);
       }
+      void get_auth_users(std::set<std::string>& auth_users) {
+        auth_users = _cnfgd.auth_users();
+      }
       void get_cert_info(ct_cert_info_data_def* d) {
         //Shared data struct, must lock
         _ld.lock();
@@ -437,6 +440,7 @@ void AkamaiQueryEvent(Akamai::main_setup* main_data,
     main_data->get_cert_info(Akamai::query_interface::instance()->get_cert_info_data());
   }
   main_data->get_config_data(Akamai::query_interface::instance()->get_config_data());
+  Akamai::query_interface::instance()->update_auth_users(main_data->get_config().auth_users());
   LOG(INFO) << "Query success";
   CHECK(Akamai::query_interface::instance()->update_tables());
 }

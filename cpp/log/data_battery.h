@@ -345,6 +345,15 @@ namespace Akamai {
       } \
       pthread_mutex_unlock(&_mutex); \
       return ret
+#define getSLockMutex(f,t) \
+      std::set<t> ret; \
+      pthread_mutex_lock(&_mutex); \
+      for (int i = 0; i < f ## _size(); ++i) { \
+        ret.insert(f(i)); \
+      } \
+      pthread_mutex_unlock(&_mutex); \
+      return ret
+
 
       //db_max_entry_size is more complicated because I want to take the minimum of the config and the db 
       //  specified limit (unless config max is 0, in which case use db max)
@@ -394,6 +403,7 @@ namespace Akamai {
       uint32_t cert_check_delay() const { getLockMutex(_config.cert_check_delay,uint32_t); }
       uint32_t quorum() const { getLockMutex(_config.quorum,uint32_t); }
       std::vector<uint32_t> bucket_sets() const { getVLockMutex(_config.bucket_sets,uint32_t); }
+      std::set<std::string> auth_users() const { getSLockMutex(_config.auth_users,std::string); }
       bool publish_cert_info() const { getLockMutex(_config.publish_cert_info,bool); }
       bool get_roots_from_db() const { getLockMutex(_config.get_roots_from_db,bool); }
       

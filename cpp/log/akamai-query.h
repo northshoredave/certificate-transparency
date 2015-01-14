@@ -8,6 +8,7 @@
 #include <map>
 #include <list>
 #include <vector>
+#include <set>
 
 namespace Akamai {
   //Used to keep track of number of requests of a given type.  Each type has it's own HitCount.
@@ -159,6 +160,8 @@ namespace Akamai {
       void update_cert_info(const ct_cert_info_data_def* d);
       //Update the tables
       bool update_tables() { update_table_data(); return update_tables_on_disk(); } 
+      //Update the authorized users
+      void update_auth_users(const std::set<std::string>& auth_users) { _auth_users = auth_users; }
       //Make query interface a singleton so I can get at if from deep in ct code to update stats, etc
       static query_interface* instance();
       static void init(std::string tableprov_directory,std::string myid);
@@ -173,6 +176,7 @@ namespace Akamai {
       ct_config_data_def* get_config_data() { return _config_data; }
       ct_stats_data_def* get_stats_data() { return _stats_data; }
       ct_cert_info_data_def* get_cert_info_data() { return _cert_info_data; }
+      std::set<std::string>& get_auth_users() { return _auth_users; }
 
       bool is_main_ok() const { return _b_main_ok; }
       void set_is_main_ok(std::string c) { 
@@ -221,6 +225,7 @@ namespace Akamai {
       ct_config_data_def* _config_data;
       ct_stats_data_def* _stats_data;
       ct_cert_info_data_def* _cert_info_data;
+      std::set<std::string> _auth_users; //Abusing query singleton to pass auth_user info
       mutable pthread_mutex_t _mutex;
   };
 

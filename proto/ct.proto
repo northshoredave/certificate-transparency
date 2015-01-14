@@ -328,4 +328,6 @@ message AkamaiConfig {
   optional uint32 quorum = 40 [ default = 2 ];
   //What entry to get the full root set from DB
   optional string db_all_root_key = 41 [ default = "all_roots" ];
+  //List of users who are authorized to use the all_roots
+  repeated string auth_users = 42;
 }

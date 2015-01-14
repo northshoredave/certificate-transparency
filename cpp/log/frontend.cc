@@ -56,20 +56,22 @@ SubmitResult Frontend::QueueProcessedEntry(
 }
 
 SubmitResult Frontend::QueueX509Entry(CertChain* chain,
-                                      SignedCertificateTimestamp* sct) {
+                                      SignedCertificateTimestamp* sct,
+                                      bool allroots) {
   LogEntry entry;
   // Make sure the correct statistics get updated in case of error.
   entry.set_type(ct::X509_ENTRY);
-  return QueueProcessedEntry(handler_->ProcessX509Submission(chain, &entry),
+  return QueueProcessedEntry(handler_->ProcessX509Submission(chain, &entry, allroots),
                              entry, sct);
 }
 
 SubmitResult Frontend::QueuePreCertEntry(PreCertChain* chain,
-                                         SignedCertificateTimestamp* sct) {
+                                         SignedCertificateTimestamp* sct,
+                                         bool allroots) {
   LogEntry entry;
   // Make sure the correct statistics get updated in case of error.
   entry.set_type(ct::PRECERT_ENTRY);
-  return QueueProcessedEntry(handler_->ProcessPreCertSubmission(chain, &entry),
+  return QueueProcessedEntry(handler_->ProcessPreCertSubmission(chain, &entry,allroots),
                              entry, sct);
 }
 
