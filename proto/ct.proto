@@ -326,4 +326,6 @@ message AkamaiConfig {
   optional uint64 max_time_skew = 39 [ default = 3600000 ];
   //What is the min number of peers that must agree on time for quorum
   optional uint32 quorum = 40 [ default = 2 ];
+  //What entry to get the full root set from DB
+  optional string db_all_root_key = 41 [ default = "all_roots" ];
 }

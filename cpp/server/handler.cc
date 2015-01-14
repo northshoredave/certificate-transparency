@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <utility>
 #include <vector>
+#include <sys/queue.h>
 
 #include "log/cert.h"
 #include "log/cert_checker.h"
@@ -71,7 +72,6 @@ void SendError(evhttp_request* req, int http_status, const string& error_msg) {
   SendJsonReply(req, http_status, json_reply);
 }
 
-
 bool ExtractChain(evhttp_request* req, CertChain* chain) {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_POST) {
     SendError(req, HTTP_BADMETHOD, "Method not allowed.");
@@ -114,6 +114,12 @@ bool ExtractChain(evhttp_request* req, CertChain* chain) {
     chain->AddCert(cert);
   }
 
+  LOG(INFO) << "DWC look for allroots";
+  JsonString json_key(json_body,"allroots");
+  if (!json_key.Ok()) {
+    LOG(INFO) << "Allroots not found?";
+  }
+  LOG(INFO) << "AllRoots value " << json_key.Value(); 
   return true;
 }
 
@@ -365,11 +371,18 @@ void HttpHandler::GetProof(evhttp_request* req) const {
 
 
 void HttpHandler::GetSTH(evhttp_request* req) const {
+
   if (evhttp_request_get_command(req) != EVHTTP_REQ_GET)
     SendError(req, HTTP_BADMETHOD, "Method not allowed.");
   if (Akamai::query_interface::instance()) {
     Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETSTH);
     if (!Akamai::query_interface::instance()->is_main_ok()) { return SendError(req, HTTP_SERVUNAVAIL, ""); }
+  }
+  evkeyvalq *req_header = evhttp_request_get_input_headers(req);
+  evkeyval *header;
+
+  TAILQ_FOREACH(header, req_header, next) {
+    printf("DWC Header: %s, value %s\n",header->key,header->value);
   }
 
   const SignedTreeHead& sth(log_lookup_->GetSTH());

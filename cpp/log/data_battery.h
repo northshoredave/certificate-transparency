@@ -360,6 +360,7 @@ namespace Akamai {
       std::string db_pending() const { getLockMutex(_config.db_pending,std::string); }
       std::string db_root_table() const { getLockMutex(_config.db_root_table,std::string); }
       std::string db_root_key() const { getLockMutex(_config.db_root_key,std::string); }
+      std::string db_all_root_key() const { getLockMutex(_config.db_all_root_key,std::string); }
       std::string db_app() const { getLockMutex(_config.db_app,std::string); }
       std::string db_hostname() const { getLockMutex(_config.db_hostname,std::string); }
       std::string db_serv() const { getLockMutex(_config.db_serv,std::string); }

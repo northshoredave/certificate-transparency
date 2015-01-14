@@ -49,6 +49,7 @@ DEFINE_string(akamai_db_config_table,"pending","What table to get config from");
 DEFINE_string(akamai_db_config_key,"config","What key to retrieve from config table");
 DEFINE_string(akamai_db_roots_table,"leaves","What table to put roots in");
 DEFINE_string(akamai_db_roots_key,"roots","What key to put roots in");
+DEFINE_string(akamai_db_all_roots_key,"all_roots","What key to put all roots in");
 DEFINE_uint64(akamai_clear_removed_peers,0,"Clear pending table of the removed peers older then this.  0 disables");
 DEFINE_bool(akamai_clear_pending,false,"Clear pending table of pending certs");
 DEFINE_bool(akamai_clear_leaves,false,"Clear leaves table");
@@ -59,9 +60,12 @@ DEFINE_bool(akamai_print_config,false,"Get config from DB and print it out");
 DEFINE_string(akamai_read_config,"empty","Read config from file to get config settings");
 DEFINE_string(akamai_print_index,"empty","Print index from table.  Requires string index or pending");
 DEFINE_uint64(akamai_db_request_bytes,5242880,"size of DB max entry size");
-DEFINE_string(akamai_submit_root_ca,"empty","Give filename of roots ca to submit.  Carefull, this overwrites what's in the DB.  Only takes effect when CT restarts");
-DEFINE_string(akamai_dump_root_ca,"empty","Dumps out the root ca in entirety");
-DEFINE_bool(akamai_print_root_ca,false,"Print out subj of root ca");
+DEFINE_string(akamai_submit_root_ca,"empty","Give filename of roots ca to submit for reduced set.  Carefull, this overwrites what's in the DB.  Only takes effect when CT restarts");
+DEFINE_string(akamai_submit_all_root_ca,"empty","Give filename of roots ca to submit for complete set.  Carefull, this overwrites what's in the DB.  Only takes effect when CT restarts");
+DEFINE_string(akamai_dump_root_ca,"empty","Dumps out the reduced root ca in entirety");
+DEFINE_string(akamai_dump_all_root_ca,"empty","Dumps out the complete root ca in entirety");
+DEFINE_bool(akamai_print_root_ca,false,"Print out subj of reduced root ca");
+DEFINE_bool(akamai_print_all_root_ca,false,"Print out subj of complete root ca");
 DEFINE_string(akamai_dump_leaves,"empty","Dump the leaves in serialized form to a file.  The file could then be read by another tool, or if we ever move to another database");
 DEFINE_string(akamai_read_leaves,"empty","Read leaves from file and load into DataBattery.");
 DEFINE_string(akamai_dump_pending,"empty","Dump the pending in serialized form to a file.  The file could then be read by another tool, or if we ever move to another database");
@@ -359,7 +363,7 @@ void print_pending_indexes(DataBattery* db) {
   }
 }
 
-void submit_root_ca(DataBattery* db, string &cert_file) {
+void submit_root_ca(DataBattery* db, string &cert_file, bool all_roots) {
   cert_trans::CertChecker checker;
    if (!checker.LoadTrustedCertificates(cert_file)) {
      LOG(INFO) << "Opps, couldn't read cert_file " << cert_file;
@@ -374,14 +378,17 @@ void submit_root_ca(DataBattery* db, string &cert_file) {
    }
    string data;
    roots.SerializeToString(&data);
-   if (!db->PUT(FLAGS_akamai_db_roots_table,FLAGS_akamai_db_roots_key,data)) {
+   string key = FLAGS_akamai_db_roots_key;
+   if (all_roots) { key = FLAGS_akamai_db_all_roots_key; }
+   if (!db->PUT(FLAGS_akamai_db_roots_table,key,data)) {
      LOG(INFO) << "Put roots failed";
    }
 }
 
-void print_root_ca(DataBattery* db) {
+void print_root_ca(DataBattery* db, bool all_roots) {
   string data;
-  if (!db->GET(FLAGS_akamai_db_roots_table,FLAGS_akamai_db_roots_key,data)) {
+  string key = all_roots?FLAGS_akamai_db_all_roots_key:FLAGS_akamai_db_roots_key;
+  if (!db->GET(FLAGS_akamai_db_roots_table,key,data)) {
     LOG(INFO) << "Failed to get roots";
   }
   ct::X509Root roots;
@@ -395,9 +402,10 @@ void print_root_ca(DataBattery* db) {
   }
 }
 
-void dump_root_ca(DataBattery* db) {
+void dump_root_ca(DataBattery* db, bool all_roots) {
   string data;
-  if (!db->GET(FLAGS_akamai_db_roots_table,FLAGS_akamai_db_roots_key,data)) {
+  string key = all_roots?FLAGS_akamai_db_all_roots_key:FLAGS_akamai_db_roots_key;
+  if (!db->GET(FLAGS_akamai_db_roots_table,key,data)) {
     LOG(INFO) << "Failed to get roots";
   }
   ct::X509Root roots;
@@ -564,9 +572,12 @@ int main(int argc, char* argv[]) {
     if (FLAGS_akamai_clear_peers) { clear_peers(db); }
   }
   if (FLAGS_akamai_clear_removed_peers) { clear_removed_pending(db); }
-  if (FLAGS_akamai_submit_root_ca != "empty") { submit_root_ca(db,FLAGS_akamai_submit_root_ca); }
-  if (FLAGS_akamai_print_root_ca) { print_root_ca(db); }
-  if (FLAGS_akamai_dump_root_ca != "empty") { dump_root_ca(db); }
+  if (FLAGS_akamai_submit_root_ca != "empty") { submit_root_ca(db,FLAGS_akamai_submit_root_ca,false); }
+  if (FLAGS_akamai_submit_all_root_ca != "empty") { submit_root_ca(db,FLAGS_akamai_submit_all_root_ca,true); }
+  if (FLAGS_akamai_print_root_ca) { print_root_ca(db,false); }
+  if (FLAGS_akamai_print_all_root_ca) { print_root_ca(db,true); }
+  if (FLAGS_akamai_dump_root_ca != "empty") { dump_root_ca(db,false); }
+  if (FLAGS_akamai_dump_all_root_ca != "empty") { dump_root_ca(db,true); }
   if (FLAGS_akamai_log_cert != "empty") { print_log_cert(db); }
 
   //These create certtables which owns db, so don't free again, just return

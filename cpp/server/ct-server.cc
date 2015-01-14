@@ -34,7 +34,9 @@ DEFINE_string(server, "localhost", "Server host");
 DEFINE_int32(port, 9999, "Server port");
 DEFINE_string(key, "", "PEM-encoded server private key file");
 DEFINE_string(trusted_cert_file, "",
-              "File for trusted CA certificates, in concatenated PEM format");
+              "File for trusted CA certificates (reduced set), in concatenated PEM format");
+DEFINE_string(trusted_cert_all_roots_file, "",
+              "File for trusted CA certificates (full set), in concatenated PEM format");
 DEFINE_string(cert_dir, "", "Storage directory for certificates");
 DEFINE_string(tree_dir, "", "Storage directory for trees");
 DEFINE_string(sqlite_db, "", "Database for certificate and tree storage");
@@ -196,20 +198,13 @@ namespace Akamai {
         LOG(INFO) << "Wrote public cert to DB";
       }
 
-      void get_roots() {
-        LOG(INFO) << "Get roots";
-        DataBattery::Settings db_settings(_cnfgd.db_app(), _cnfgd.db_hostname(),
-            _cnfgd.db_serv(), _cnfgd.db_cert(), _cnfgd.db_key(),
-            _cnfgd.db_cert_dir(), _cnfgd.short_sleep(), _cnfgd.cert_check_delay(),
-            _cnfgd.db_preface());
-        DataBattery db(db_settings);
-        CHECK(db.is_good()) << "Failed to create DataBattery instance for db";
+      void get_roots_helper(string key, string filename, DataBattery& db) {
         string data;
-        CHECK(db.GET_key_from_table(_cnfgd.db_root_table(),_cnfgd.db_root_key(),_cnfgd.db_max_entry_size(),
+        CHECK(db.GET_key_from_table(_cnfgd.db_root_table(),key,_cnfgd.db_max_entry_size(),
               data)) << "Failed to retrieve roots from DB";
         ct::X509Root roots; 
         CHECK(roots.ParseFromString(data)) << "Failed to parse roots from DB";
-        std::ofstream ofs(FLAGS_trusted_cert_file.c_str());
+        std::ofstream ofs(filename.c_str());
         for (int i = 0; i < roots.roots_size(); ++i) {
           cert_trans::Cert* new_root = new cert_trans::Cert;
           new_root->LoadFromDerString(roots.roots(i));
@@ -218,6 +213,18 @@ namespace Akamai {
           ofs << pem_enc;
         }
         ofs.close();
+      }
+
+      void get_roots() {
+        LOG(INFO) << "Get roots";
+        DataBattery::Settings db_settings(_cnfgd.db_app(), _cnfgd.db_hostname(),
+            _cnfgd.db_serv(), _cnfgd.db_cert(), _cnfgd.db_key(),
+            _cnfgd.db_cert_dir(), _cnfgd.short_sleep(), _cnfgd.cert_check_delay(),
+            _cnfgd.db_preface());
+        DataBattery db(db_settings);
+        CHECK(db.is_good()) << "Failed to create DataBattery instance for db";
+        get_roots_helper(_cnfgd.db_root_key(),FLAGS_trusted_cert_file,db);
+        get_roots_helper(_cnfgd.db_all_root_key(),FLAGS_trusted_cert_all_roots_file,db);
       }
 
       ~main_setup() {
@@ -476,7 +483,10 @@ int main(int argc, char* argv[]) {
   } 
   CertChecker checker;
   CHECK(checker.LoadTrustedCertificates(FLAGS_trusted_cert_file))
-      << "Could not load CA certs from " << FLAGS_trusted_cert_file;
+      << "Could not load reduced CA certs from " << FLAGS_trusted_cert_file;
+  CertChecker checker_all_roots;
+  CHECK(checker_all_roots.LoadTrustedCertificates(FLAGS_trusted_cert_all_roots_file))
+      << "Could not load complete CA certs from " << FLAGS_trusted_cert_all_roots_file;
 
   if (FLAGS_sqlite_db == "")
     CHECK_NE(FLAGS_cert_dir, FLAGS_tree_dir)
@@ -508,7 +518,7 @@ int main(int argc, char* argv[]) {
   evthread_use_pthreads();
   const shared_ptr<libevent::Base> event_base(make_shared<libevent::Base>());
 
-  Frontend frontend(new CertSubmissionHandler(&checker),
+  Frontend frontend(new CertSubmissionHandler(&checker,&checker_all_roots),
                     new FrontendSigner(db, &log_signer));
   TreeSigner<LoggedCertificate> tree_signer(db, &log_signer);
   LogLookup<LoggedCertificate> log_lookup(db);

@@ -15,7 +15,7 @@
 class CertSubmissionHandler {
  public:
   // Does not take ownership of the cert_checker.
-  explicit CertSubmissionHandler(cert_trans::CertChecker* cert_checker);
+  explicit CertSubmissionHandler(cert_trans::CertChecker* cert_checker, cert_trans::CertChecker* all_roots_cert_checker);
   ~CertSubmissionHandler() {
   }
 
@@ -53,6 +53,7 @@ class CertSubmissionHandler {
       cert_trans::CertChecker::CertVerifyResult result);
 
   cert_trans::CertChecker* cert_checker_;
+  cert_trans::CertChecker* all_roots_cert_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(CertSubmissionHandler);
 };
