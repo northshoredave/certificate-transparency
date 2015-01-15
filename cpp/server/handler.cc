@@ -116,17 +116,22 @@ bool ExtractChain(evhttp_request* req, CertChain* chain,bool& allroots) {
 
   evkeyvalq *req_header = evhttp_request_get_input_headers(req);
   const char* user_name = evhttp_find_header(req_header,"CommonName");
-  LOG(INFO) << "Look for allroots and username:" << user_name;
-  JsonString json_key(json_body,"allroots");
-  allroots = false;
-  if (json_key.Ok()) {
-    LOG(INFO) << "AllRoots value " << json_key.Value(); 
-    //Once again, abusing the query singleton to get the approved user information
-    if (Akamai::query_interface::instance()) {
-      if (Akamai::query_interface::instance()->get_auth_users().find(user_name) !=
-          Akamai::query_interface::instance()->get_auth_users().end()) {
-        LOG(INFO) << "Confirm user:" << user_name;
-        allroots = true;
+  if (!user_name) { 
+    LOG(INFO) << "No common name";
+    allroots = false; 
+  } else {
+    LOG(INFO) << "Look for allroots and username:" << user_name;
+    JsonString json_key(json_body,"allroots");
+    allroots = false;
+    if (json_key.Ok()) {
+      LOG(INFO) << "AllRoots value " << json_key.Value(); 
+      //Once again, abusing the query singleton to get the approved user information
+      if (Akamai::query_interface::instance()) {
+        if (Akamai::query_interface::instance()->get_auth_users().find(user_name) !=
+            Akamai::query_interface::instance()->get_auth_users().end()) {
+          LOG(INFO) << "Confirm user:" << user_name;
+          allroots = true;
+        }
       }
     }
   }

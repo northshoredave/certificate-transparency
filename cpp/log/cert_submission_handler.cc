@@ -81,9 +81,9 @@ CertSubmissionHandler::ProcessX509Submission(CertChain* chain,
 
   CertChecker::CertVerifyResult result = CertChecker::OK;
   if (allroots) {
-    result = cert_checker_->CheckCertChain(chain);
-  } else {
     result = all_roots_cert_checker_->CheckCertChain(chain);
+  } else {
+    result = cert_checker_->CheckCertChain(chain);
   }
   if (result != CertChecker::OK)
     return GetVerifyError(result);
