@@ -412,7 +412,8 @@ void dump_root_ca(DataBattery* db, bool all_roots) {
   if (!roots.ParseFromString(data)) {
     LOG(INFO) << "Failed to parse roots";
   }
-  ofstream ofs(FLAGS_akamai_dump_root_ca.c_str());
+  string out_files = all_roots?FLAGS_akamai_dump_all_root_ca:FLAGS_akamai_dump_root_ca;
+  ofstream ofs(out_files.c_str());
   for (int i = 0; i < roots.roots_size(); ++i) {
     ofs << roots.roots(i);
   }

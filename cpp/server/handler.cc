@@ -113,30 +113,24 @@ bool ExtractChain(evhttp_request* req, CertChain* chain,bool& allroots) {
 
     chain->AddCert(cert);
   }
+
   evkeyvalq *req_header = evhttp_request_get_input_headers(req);
-  evkeyval *header;
-
-  TAILQ_FOREACH(header, req_header, next) {
-    LOG(INFO) << "DWC Header:"<<header->key<<", value " <<header->value;
-  }
-
-  req_header = evhttp_request_get_input_headers(req);
   const char* user_name = evhttp_find_header(req_header,"CommonName");
-  LOG(INFO) << "DWC look for allroots and username:" << user_name;
+  LOG(INFO) << "Look for allroots and username:" << user_name;
   JsonString json_key(json_body,"allroots");
   allroots = false;
   if (json_key.Ok()) {
-    LOG(INFO) << "DWC AllRoots value " << json_key.Value(); 
+    LOG(INFO) << "AllRoots value " << json_key.Value(); 
     //Once again, abusing the query singleton to get the approved user information
     if (Akamai::query_interface::instance()) {
       if (Akamai::query_interface::instance()->get_auth_users().find(user_name) !=
           Akamai::query_interface::instance()->get_auth_users().end()) {
-        LOG(INFO) << "DWC confirm user:" << user_name;
+        LOG(INFO) << "Confirm user:" << user_name;
         allroots = true;
       }
     }
   }
-  LOG(INFO) << "DWC returning all roots " << allroots;
+  LOG(INFO) << "Returning all roots " << allroots;
   return true;
 }
 
