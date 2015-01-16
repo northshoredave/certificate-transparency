@@ -1308,7 +1308,8 @@ void ConfigData::gen_key_values(vector<pair<string, string> >& kv_pairs) const {
   pthread_mutex_lock(&_mutex);
   int num_fields = _config.GetDescriptor()->field_count();
   const Reflection* rd = _config.GetReflection();
-  for (int i = 0; i < num_fields; ++i) {
+  for (int i = 1; i <= num_fields; ++i) {
+    //These are the indexes you used in the ct.proto file.  Mine start with 1.
     const FieldDescriptor* fd = _config.GetDescriptor()->FindFieldByNumber(i);
     if (fd) {
       if (fd->is_repeated()) {
@@ -1317,6 +1318,9 @@ void ConfigData::gen_key_values(vector<pair<string, string> >& kv_pairs) const {
           switch(fd->type()) {
             case FieldDescriptor::TYPE_UINT32:
               value << rd->GetRepeatedUInt32(_config,fd,k);
+              break;
+            case FieldDescriptor::TYPE_STRING:
+              value << rd->GetRepeatedString(_config,fd,k);
               break;
             default:
               value << "unknown type";
