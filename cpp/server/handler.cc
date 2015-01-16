@@ -231,11 +231,13 @@ int GetIntParam(const multimap<string, string>& query, const string& param) {
 
 HttpHandler::HttpHandler(LogLookup<LoggedCertificate>* log_lookup,
                          const Database<LoggedCertificate>* db,
-                         const CertChecker* cert_checker, Frontend* frontend,
+                         const CertChecker* cert_checker, 
+                         const CertChecker* cert_checker_all_roots, Frontend* frontend,
                          ThreadPool* pool)
     : log_lookup_(CHECK_NOTNULL(log_lookup)),
       db_(CHECK_NOTNULL(db)),
       cert_checker_(CHECK_NOTNULL(cert_checker)),
+      cert_checker_all_roots_(CHECK_NOTNULL(cert_checker_all_roots)),
       frontend_(frontend),
       pool_(CHECK_NOTNULL(pool)) {
 }
@@ -314,15 +316,31 @@ void HttpHandler::GetRoots(evhttp_request* req) const {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_GET) {
     SendError(req, HTTP_BADMETHOD, "Method not allowed.");
   }
+  bool allroots = false;
   if (Akamai::query_interface::instance()) {
     Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::GETROOTS);
     if (!Akamai::query_interface::instance()->is_main_ok()) { return SendError(req, HTTP_SERVUNAVAIL, ""); }
+
+    evkeyvalq *req_header = evhttp_request_get_input_headers(req);
+    const char* user_name = evhttp_find_header(req_header,"CommonName");
+    string value;
+    const multimap<string, string> query(ParseQuery(req));
+    if (user_name && GetParam(query, "allroots", &value)) { 
+      LOG(INFO) << "AllRoots value " << value; 
+      //Once again, abusing the query singleton to get the approved user information
+      if (Akamai::query_interface::instance()->get_auth_users().find(user_name) !=
+          Akamai::query_interface::instance()->get_auth_users().end()) {
+        LOG(INFO) << "Confirm user:" << user_name;
+        allroots = true;
+      }
+    }
   }
 
   JsonArray roots;
   multimap<string, const Cert*>::const_iterator it;
-  for (it = cert_checker_->GetTrustedCertificates().begin();
-       it != cert_checker_->GetTrustedCertificates().end(); ++it) {
+  const CertChecker* cert_checker = allroots?cert_checker_all_roots_:cert_checker_;
+  for (it = cert_checker->GetTrustedCertificates().begin();
+       it != cert_checker->GetTrustedCertificates().end(); ++it) {
     string cert;
     if (it->second->DerEncoding(&cert) != Cert::TRUE) {
       LOG(ERROR) << "Cert encoding failed";

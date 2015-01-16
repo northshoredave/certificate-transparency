@@ -539,7 +539,7 @@ int main(int argc, char* argv[]) {
   }
 
   ThreadPool pool;
-  HttpHandler handler(&log_lookup, db, &checker, &frontend, &pool);
+  HttpHandler handler(&log_lookup, db, &checker, &checker_all_roots,&frontend, &pool);
 
   LOG(INFO) << "Create tree signing event "
             << FLAGS_tree_signing_frequency_seconds;

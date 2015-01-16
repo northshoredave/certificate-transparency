@@ -24,8 +24,8 @@ class HttpHandler {
  public:
   HttpHandler(LogLookup<LoggedCertificate>* log_lookup,
               const Database<LoggedCertificate>* db,
-              const CertChecker* cert_checker, Frontend* frontend,
-              ThreadPool* pool);
+              const CertChecker* cert_checker, const CertChecker* cert_checker_all_roots,
+              Frontend* frontend, ThreadPool* pool);
 
   void Add(libevent::HttpServer* server, bool allow_audit, bool allow_subm);
 
@@ -49,6 +49,7 @@ class HttpHandler {
   LogLookup<LoggedCertificate>* const log_lookup_;
   const Database<LoggedCertificate>* const db_;
   const CertChecker* const cert_checker_;
+  const CertChecker* const cert_checker_all_roots_;
   Frontend* const frontend_;
   ThreadPool* const pool_;
 
