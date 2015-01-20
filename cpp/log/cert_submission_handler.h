@@ -33,9 +33,9 @@ class CertSubmissionHandler {
 
   // These may change |chain|.
   SubmitResult ProcessX509Submission(cert_trans::CertChain* chain,
-                                     ct::LogEntry* entry, bool allroots);
+                                     ct::LogEntry* entry, std::string allroots);
   SubmitResult ProcessPreCertSubmission(cert_trans::PreCertChain* chain,
-                                        ct::LogEntry* entry, bool allroots);
+                                        ct::LogEntry* entry, std::string allroots);
 
   // For clients, to reconstruct the bytestring under the signature
   // from the observed chain. Does not check whether the entry

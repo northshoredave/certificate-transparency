@@ -71,10 +71,10 @@ class Frontend {
   // Note that these might change the |chain|.
   SubmitResult QueueX509Entry(cert_trans::CertChain* chain,
                               ct::SignedCertificateTimestamp* sct,
-                              bool allroots);
+                              std::string allroots);
   SubmitResult QueuePreCertEntry(cert_trans::PreCertChain* chain,
                                  ct::SignedCertificateTimestamp* sct,
-                                 bool allroots);
+                                 std::string allroots);
 
   static std::string SubmitResultString(SubmitResult result);
 

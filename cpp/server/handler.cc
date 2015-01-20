@@ -72,7 +72,7 @@ void SendError(evhttp_request* req, int http_status, const string& error_msg) {
   SendJsonReply(req, http_status, json_reply);
 }
 
-bool ExtractChain(evhttp_request* req, CertChain* chain,bool& allroots) {
+bool ExtractChain(evhttp_request* req, CertChain* chain,string& allroots) {
   if (evhttp_request_get_command(req) != EVHTTP_REQ_POST) {
     SendError(req, HTTP_BADMETHOD, "Method not allowed.");
     return false;
@@ -116,13 +116,10 @@ bool ExtractChain(evhttp_request* req, CertChain* chain,bool& allroots) {
 
   evkeyvalq *req_header = evhttp_request_get_input_headers(req);
   const char* user_name = evhttp_find_header(req_header,"CommonName");
-  if (!user_name) { 
-    LOG(INFO) << "No common name";
-    allroots = false; 
-  } else {
+  allroots = "empty";
+  if (user_name) { 
     LOG(INFO) << "Look for allroots and username:" << user_name;
     JsonString json_key(json_body,"allroots");
-    allroots = false;
     if (json_key.Ok()) {
       LOG(INFO) << "AllRoots value " << json_key.Value(); 
       //Once again, abusing the query singleton to get the approved user information
@@ -130,7 +127,7 @@ bool ExtractChain(evhttp_request* req, CertChain* chain,bool& allroots) {
         if (Akamai::query_interface::instance()->get_auth_users().find(user_name) !=
             Akamai::query_interface::instance()->get_auth_users().end()) {
           LOG(INFO) << "Confirm user:" << user_name;
-          allroots = true;
+          allroots = user_name;
         }
       }
     }
@@ -476,9 +473,12 @@ void HttpHandler::AddChain(evhttp_request* req) {
     Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::ADDCHAIN);
     if (!Akamai::query_interface::instance()->is_main_ok()) { return SendError(req, HTTP_SERVUNAVAIL, ""); }
   }
-  bool allroots = false;
+  string allroots("empty");
   if (!ExtractChain(req, chain.get(),allroots)) {
     return;
+  }
+  if (Akamai::query_interface::instance() && (allroots != "empty")) {
+    Akamai::query_interface::instance()->get_user_hits_data()->hit(allroots);
   }
   pool_->Add(bind(&HttpHandler::BlockingAddChain, this, req, chain, allroots));
 }
@@ -490,9 +490,12 @@ void HttpHandler::AddPreChain(evhttp_request* req) {
     Akamai::query_interface::instance()->process_hit(Akamai::RequestStats::ADDPRECHAIN);
     if (!Akamai::query_interface::instance()->is_main_ok()) { return SendError(req, HTTP_SERVUNAVAIL, ""); }
   }
-  bool allroots = false;
+  string allroots("empty");
   if (!ExtractChain(req, chain.get(),allroots)) {
     return;
+  }
+  if (Akamai::query_interface::instance() && (allroots != "empty")) {
+    Akamai::query_interface::instance()->get_user_hits_data()->hit(allroots);
   }
   pool_->Add(bind(&HttpHandler::BlockingAddPreChain, this, req, chain, allroots));
 }
@@ -532,7 +535,7 @@ void HttpHandler::BlockingGetEntries(evhttp_request* req, int start,
 
 void HttpHandler::BlockingAddChain(evhttp_request* req,
                                    const shared_ptr<CertChain>& chain,
-                                   bool allroots) const {
+                                   string allroots) const {
   SignedCertificateTimestamp sct;
 
   AddChainReply(req, CHECK_NOTNULL(frontend_)
@@ -542,7 +545,7 @@ void HttpHandler::BlockingAddChain(evhttp_request* req,
 
 
 void HttpHandler::BlockingAddPreChain(
-    evhttp_request* req, const shared_ptr<PreCertChain>& chain,bool allroots) const {
+    evhttp_request* req, const shared_ptr<PreCertChain>& chain,string allroots) const {
   SignedCertificateTimestamp sct;
 
   AddChainReply(req, CHECK_NOTNULL(frontend_)

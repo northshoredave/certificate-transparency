@@ -106,6 +106,40 @@ void cert_info_callback(std::ofstream& ofs,const void* user_arg) {
   }
 }
 
+/******* User hits tables ****************/
+static q2_column_description ct_user_hits_columns[] = {
+  {"myid",     "ct instance id", Q2_STRING, Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
+  {"now",      "current time",  Q2_TIME,   Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
+  {"user_name", "request type", Q2_STRING, Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
+  {"hits", "number of hits", Q2_INT, Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
+  Q2_END_COLUMN
+};
+
+static struct ct_user_hits_data_def ct_user_hits_data;
+
+void query_interface::update_user_hits(const ct_user_hits_data_def* d) {
+  pthread_mutex_lock(&_mutex);
+  ct_user_hits_data = *d;
+  pthread_mutex_unlock(&_mutex);
+}
+
+void user_hits_callback(std::ofstream& ofs,const void* user_arg) {
+  LOG(INFO) << "user_hits_callback";
+  const ct_user_hits_data_def* args = (const ct_user_hits_data_def *)user_arg;
+  time_t current_time = time(0);
+
+  for (map<string,uint64_t>::const_iterator i = args->_user_hits.begin();
+      i != args->_user_hits.end(); ++i) {
+    ofs << args->_myid << ","
+      << current_time << ","
+      << i->first << ","
+      << i->second << endl;
+  }
+}
+
+/******* End Request Counts Table ********/
+
+
 /******* Request Counts Tables ***********/
 static q2_column_description ct_req_count_columns[] = {
   {"myid",     "ct instance id", Q2_STRING, Q2_AGGREGATION_NONE, Q2_NOT_NULLABLE, Q2_NO_MERGING},
@@ -209,6 +243,7 @@ static struct table_schema tables[] = {
   { {"appbatt_app_ct_cert_info", "Commited cert info",ct_cert_info_columns}, &ct_cert_info_data, cert_info_callback },
   { {"appbatt_app_ct_stats","General run statistics",ct_stats_columns}, &ct_stats_data, stats_callback },
   { {"appbatt_app_ct_req_count","How many hits each request type get over different time periods", ct_req_count_columns}, &ct_req_count_data, req_count_callback },
+  { {"appbatt_app_ct_user_hits","How many certs a given authorized user has added using the allroots API", ct_user_hits_columns}, &ct_user_hits_data, user_hits_callback },
   { { 0 } }
 };
 
@@ -219,6 +254,7 @@ void query_interface::update_table_data() {
   update_main(_main_data);
   update_config(_config_data);
   update_cert_info(_cert_info_data);
+  update_user_hits(_user_hits_data);
 }
 
 bool query_interface::update_tables_on_disk() const {

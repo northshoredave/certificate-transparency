@@ -75,12 +75,12 @@ bool CertSubmissionHandler::X509ChainToEntry(const CertChain& chain,
 CertSubmissionHandler::SubmitResult
 CertSubmissionHandler::ProcessX509Submission(CertChain* chain,
                                              LogEntry* entry,
-                                             bool allroots) {
+                                             string allroots) {
   if (!chain->IsLoaded())
     return EMPTY_SUBMISSION;
 
   CertChecker::CertVerifyResult result = CertChecker::OK;
-  if (allroots) {
+  if (allroots != "empty") {
     result = all_roots_cert_checker_->CheckCertChain(chain);
   } else {
     result = cert_checker_->CheckCertChain(chain);
@@ -107,10 +107,10 @@ CertSubmissionHandler::ProcessX509Submission(CertChain* chain,
 
 CertSubmissionHandler::SubmitResult
 CertSubmissionHandler::ProcessPreCertSubmission(PreCertChain* chain,
-                                                LogEntry* entry, bool allroots) {
+                                                LogEntry* entry, string allroots) {
   PrecertChainEntry* precert_entry = entry->mutable_precert_entry();
   CertChecker::CertVerifyResult result = CertChecker::OK;
-  if (allroots) { 
+  if (allroots != "empty") { 
     result = all_roots_cert_checker_->CheckPreCertChain(
       chain, precert_entry->mutable_pre_cert()->mutable_issuer_key_hash(),
       precert_entry->mutable_pre_cert()->mutable_tbs_certificate());

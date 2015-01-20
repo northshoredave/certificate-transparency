@@ -41,10 +41,10 @@ class HttpHandler {
   void BlockingGetEntries(evhttp_request* req, int start, int end) const;
   void BlockingAddChain(evhttp_request* req,
                         const boost::shared_ptr<CertChain>& chain,
-                        bool allroots) const;
+                        std::string allroots) const;
   void BlockingAddPreChain(evhttp_request* req,
                            const boost::shared_ptr<PreCertChain>& chain,
-                           bool allroots) const;
+                           std::string allroots) const;
 
   LogLookup<LoggedCertificate>* const log_lookup_;
   const Database<LoggedCertificate>* const db_;

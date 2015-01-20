@@ -57,7 +57,7 @@ SubmitResult Frontend::QueueProcessedEntry(
 
 SubmitResult Frontend::QueueX509Entry(CertChain* chain,
                                       SignedCertificateTimestamp* sct,
-                                      bool allroots) {
+                                      string allroots) {
   LogEntry entry;
   // Make sure the correct statistics get updated in case of error.
   entry.set_type(ct::X509_ENTRY);
@@ -67,7 +67,7 @@ SubmitResult Frontend::QueueX509Entry(CertChain* chain,
 
 SubmitResult Frontend::QueuePreCertEntry(PreCertChain* chain,
                                          SignedCertificateTimestamp* sct,
-                                         bool allroots) {
+                                         string allroots) {
   LogEntry entry;
   // Make sure the correct statistics get updated in case of error.
   entry.set_type(ct::PRECERT_ENTRY);

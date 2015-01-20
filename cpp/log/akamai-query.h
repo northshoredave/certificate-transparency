@@ -109,6 +109,18 @@ namespace Akamai {
     std::vector<std::pair<std::string,std::string> > _config_key_value;
   };
 
+  struct ct_user_hits_data_def {
+    ct_user_hits_data_def()
+      : _myid("")
+    {}
+    void hit(std::string user) {
+      if (_user_hits.find(user) != _user_hits.end()) { _user_hits[user]++; }
+      else { _user_hits[user] = 1; }
+    }
+    std::string _myid;
+    std::map<std::string,uint64_t> _user_hits;
+  };
+
   struct ct_stats_data_def {
     ct_stats_data_def()
       : _myid("")
@@ -160,6 +172,8 @@ namespace Akamai {
       void update_cert_info(const ct_cert_info_data_def* d);
       //Update the tables
       bool update_tables() { update_table_data(); return update_tables_on_disk(); } 
+      //Update the authorized user hits
+      void update_user_hits(const ct_user_hits_data_def* d);
       //Update the authorized users
       void update_auth_users(const std::set<std::string>& auth_users) { _auth_users = auth_users; }
       //Make query interface a singleton so I can get at if from deep in ct code to update stats, etc
@@ -176,6 +190,7 @@ namespace Akamai {
       ct_config_data_def* get_config_data() { return _config_data; }
       ct_stats_data_def* get_stats_data() { return _stats_data; }
       ct_cert_info_data_def* get_cert_info_data() { return _cert_info_data; }
+      ct_user_hits_data_def* get_user_hits_data() { return _user_hits_data; }
       std::set<std::string>& get_auth_users() { return _auth_users; }
 
       bool is_main_ok() const { return _b_main_ok; }
@@ -200,10 +215,14 @@ namespace Akamai {
         _config_data->_myid = _myid;
         _cert_info_data = new ct_cert_info_data_def;
         _cert_info_data->_myid = _myid;
+        _user_hits_data = new ct_user_hits_data_def;
+        _user_hits_data->_myid = _myid;
       }
       ~query_interface() {
         if (_stats_data) { delete _stats_data; }
         if (_main_data) { delete _main_data; }
+        if (_config_data) { delete _config_data; }
+        if (_user_hits_data) { delete _user_hits_data; }
       }
       std::string column_type_to_str(q2_data_type t) const;
       bool write_table(std::string table) const;
@@ -225,6 +244,7 @@ namespace Akamai {
       ct_config_data_def* _config_data;
       ct_stats_data_def* _stats_data;
       ct_cert_info_data_def* _cert_info_data;
+      ct_user_hits_data_def* _user_hits_data;
       std::set<std::string> _auth_users; //Abusing query singleton to pass auth_user info
       mutable pthread_mutex_t _mutex;
   };
