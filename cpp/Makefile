@@ -15,7 +15,7 @@ LOCAL_LIBS = log/libcert.a log/libdatabase.a log/liblog.a \
 #DWC - Added ldl
 LDLIBS = -lpthread -lgflags -lglog -lsqlite3 -ldl \
          -lprotobuf -levent_core -levent_extra -levent_pthreads \
-         -levent -lakacrypt -lakakernel -lakamai -lakanet -lakastack \
+         -levent -lakacrypt -lakakernel -lakamai -lakastack \
          -lrt -lssl -lcrypto  
 
 PLATFORM := $(shell uname -s)
