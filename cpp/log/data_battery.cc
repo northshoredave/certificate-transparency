@@ -837,7 +837,7 @@ void CertTables::get_all_pending(ct::LoggedCertificatePBList& pending_lcpbl) {
   }
 }
 
-void CertTables::clear_pending(const set<string>& leaves_hash) { 
+void CertTables::clear_pending(const map<string,uint64_t>& leaves_hash_timestamp) { 
   LOG(INFO) << "CT:clrp clear_pending";
   vector<string> keys;
   uint64_t pending_first_key, pending_last_key;
@@ -861,7 +861,10 @@ void CertTables::clear_pending(const set<string>& leaves_hash) {
     for (int i = 0; i < lcpbl.logged_certificate_pbs_size(); ++i) {
       const ct::LoggedCertificatePB& lcpb = lcpbl.logged_certificate_pbs(i);
       string hash = reinterpret_cast<const cert_trans::LoggedCertificate*>(&lcpb)->Hash();
-      if (leaves_hash.find(hash) == leaves_hash.end()) {
+      uint64_t timestamp = reinterpret_cast<const cert_trans::LoggedCertificate*>(&lcpb)->timestamp();
+      map<string,uint64_t>::const_iterator hash_timestamp_it = leaves_hash_timestamp.find(hash);
+      if (hash_timestamp_it == leaves_hash_timestamp.end() ||
+          hash_timestamp_it->second != timestamp) {
         all_committed = false; break;
       }
     }
@@ -1183,11 +1186,12 @@ void* CommitThread(void* arg) {
       //  The leaves hash is the list of leaves we got from the DB leaves table, i.e. gauranteed to have been
       //committed, so safe to remove from pending.  Lock to make sure we're not updating as we read it.
       pthread_mutex_lock(&ctd->_cert_tables->get_ld()->_mutex);
-      //Make a copy so I can release lock
-      set<string> leaves_hash = ctd->_cert_tables->get_ld()->_leaves_hash; 
+      //Make a copy so I can release lock.  Not really great if we ever get a lot of certs
+      map<string,uint64_t> leaves_hash_timestamp = 
+        ctd->_cert_tables->get_ld()->_leaves_hash_timestamp; 
       pthread_mutex_unlock(&ctd->_cert_tables->get_ld()->_mutex);
       //See if you clear anything out of pending
-      ctd->_cert_tables->clear_pending(leaves_hash);
+      ctd->_cert_tables->clear_pending(leaves_hash_timestamp);
       //Figure out your sleep time 
       int order = ctd->_cert_tables->get_peer_order();
       int peer_delay = 0;
@@ -1232,10 +1236,15 @@ leaves_helper_enum Akamai::leaves_helper(leaves_thread_data* ltd) {
   for (int i = 0; i < new_lcpbl.logged_certificate_pbs_size(); ++i) {
     const ct::LoggedCertificatePB& lcpb = new_lcpbl.logged_certificate_pbs(i);
     string hash = reinterpret_cast<const cert_trans::LoggedCertificate*>(&lcpb)->Hash();
-    if (ltd->_ld->_leaves_hash.find(hash) != ltd->_ld->_leaves_hash.end()) {
+    if (ltd->_ld->_leaves_seq_ids.find(lcpb.sequence_number()) != 
+        ltd->_ld->_leaves_seq_ids.end()) {
+      LOG(INFO) << "Already have sequence id " << lcpb.sequence_number();
       continue; //You've already included this leaf
     }
-    ltd->_ld->_leaves_hash.insert(hash);
+    ltd->_ld->_leaves_hash_timestamp[hash] = 
+      reinterpret_cast<const cert_trans::LoggedCertificate*>(&lcpb)->timestamp();
+    ltd->_ld->_leaves_seq_ids.insert(
+      reinterpret_cast<const cert_trans::LoggedCertificate*>(&lcpb)->sequence_number());
     ct::LoggedCertificatePB* added_lcpb = ltd->_ld->_leaves.add_logged_certificate_pbs();
     added_lcpb->CopyFrom(lcpb);
   }

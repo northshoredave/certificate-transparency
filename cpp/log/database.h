@@ -135,6 +135,10 @@ class Database {
   virtual LookupResult LookupByHash(const std::string& hash,
                                     Logged* result) const = 0;
 
+  virtual LookupResult LookupByHash(const std::string& hash,
+                                    Logged* result,
+                                    uint64_t seq_id) const { return LOOKUP_OK; }
+
   // Look up by sequence number.
   virtual LookupResult LookupByIndex(uint64_t sequence_number,
                                      Logged* result) const = 0;

@@ -42,6 +42,10 @@ class SQLiteDB : public Database<Logged> {
   virtual LookupResult LookupByHash(const std::string& hash,
                                     Logged* result) const;
 
+  virtual LookupResult LookupByHash(const std::string& hash,
+                                    Logged* result,
+                                    uint64_t seq_id) const;
+
   virtual LookupResult LookupByIndex(uint64_t sequence_number,
                                      Logged* result) const;
 

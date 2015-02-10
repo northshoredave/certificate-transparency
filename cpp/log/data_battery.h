@@ -514,9 +514,11 @@ namespace Akamai {
         return count;
       }
       const ct::LoggedCertificatePBList& get_leaves() const { return _leaves; }
-      uint get_hash_size() const { return _leaves_hash.size(); }
+      uint get_leaves_seq_ids_size() const { return _leaves_seq_ids.size(); }
     public:
-      std::set<std::string> _leaves_hash; //Kept around so we can easily check if we've already retrieved a leaf
+      //Don't really need a set, just need max, but converting from hash, so easier step for now
+      std::set<uint64_t> _leaves_seq_ids; //Kept around so we can easily check if we've already retrieved a leaf
+      std::map<std::string,uint64_t> _leaves_hash_timestamp;
       ct::LoggedCertificatePBList _leaves;
   };
 
@@ -559,7 +561,7 @@ namespace Akamai {
       //Doesn't actually clear the pending table.  It just updates the first_key of your peer index to denote
       //  where to start looking for pending certs.  We could actually delete keys out of the table, but I like
       //  maintaining the append only, never delete property.  
-      void clear_pending(const std::set<std::string>& leaves_hash);
+      void clear_pending(const std::map<std::string,uint64_t>& leaves_hash_timestamp);
 
       virtual std::string get_leaves_table_name() const { return _cnfgd->db_leaves(); }
       virtual std::string get_pending_table_name() const { return _cnfgd->db_pending(); }

@@ -28,7 +28,7 @@ SQLiteDB<Logged>::SQLiteDB(const std::string& dbfile)
                            SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL));
 
   CHECK_EQ(SQLITE_OK, sqlite3_exec(db_,
-                                   "CREATE TABLE leaves(hash BLOB UNIQUE, "
+                                   "CREATE TABLE leaves(hash BLOB, "
                                    "entry BLOB, sequence INTEGER UNIQUE)",
                                    NULL, NULL, NULL));
 
@@ -91,7 +91,8 @@ SQLiteDB<Logged>::CreateNewEntry(const std::vector<leaf_entry>& new_leaves) {
     statement.BindBlob(0,leafIt->_hash);
     statement.BindBlob(1,leafIt->_data);
     statement.BindUInt64(2,leafIt->_seqid);
-    statement.Step();
+    int ret = statement.Step();
+    CHECK_EQ(SQLITE_DONE, ret);
   }
   if (sqlite3_exec(db_, "COMMIT TRANSACTION", 0, 0, 0) != SQLITE_OK) { LOG(ERROR) << "SQL Error " << sqlite3_errmsg(db_); }
 
@@ -170,6 +171,42 @@ typename Database<Logged>::LookupResult SQLiteDB<Logged>::LookupByHash(
 
   return this->LOOKUP_OK;
 }
+
+template <class Logged>
+typename Database<Logged>::LookupResult SQLiteDB<Logged>::LookupByHash(
+    const std::string& hash, Logged* result, uint64_t seq_id) const {
+  CHECK_NOTNULL(result);
+  sqlite::Statement statement(db_,
+                              "SELECT entry, sequence FROM leaves "
+                              "WHERE hash = ? AND sequence = ?");
+  statement.BindBlob(0, hash);
+  statement.BindUInt64(1, seq_id);
+
+  int ret = statement.Step();
+  if (ret == SQLITE_DONE) { 
+    sqlite::Statement statement_null(db_,
+        "SELECT entry, sequence FROM leaves "
+        "WHERE hash = ? AND sequence is NULL");
+    statement_null.BindBlob(0, hash);
+    if (ret == SQLITE_DONE) { 
+      return this->NOT_FOUND;
+    }
+    CHECK_EQ(SQLITE_ROW, ret);
+    std::string data;
+    statement_null.GetBlob(0, &data);
+    CHECK(result->ParseFromDatabase(data));
+    result->clear_sequence_number();
+  } else {
+    CHECK_EQ(SQLITE_ROW, ret);
+    std::string data;
+    statement.GetBlob(0, &data);
+    CHECK(result->ParseFromDatabase(data));
+    result->set_sequence_number(statement.GetUInt64(1));
+  }
+
+  return this->LOOKUP_OK;
+}
+
 
 template <class Logged>
 typename Database<Logged>::LookupResult SQLiteDB<Logged>::LookupByIndex(
@@ -262,7 +299,7 @@ typename Database<Logged>::LookupResult SQLiteDB<Logged>::LatestTreeHead(
 template <class Logged> void SQLiteDB<Logged>::ClearTables() {
   CHECK_EQ(SQLITE_OK, sqlite3_exec(db_, "DROP TABLE leaves",NULL,NULL,NULL));
   CHECK_EQ(SQLITE_OK, sqlite3_exec(db_, "DROP TABLE trees",NULL,NULL,NULL));
-  CHECK_EQ(SQLITE_OK, sqlite3_exec(db_, "CREATE TABLE leaves(hash BLOB UNIQUE, "
+  CHECK_EQ(SQLITE_OK, sqlite3_exec(db_, "CREATE TABLE leaves(hash BLOB, "
         "entry BLOB, sequence INTEGER UNIQUE)",
         NULL, NULL, NULL));
   CHECK_EQ(SQLITE_OK, sqlite3_exec(db_, "CREATE TABLE trees(sth BLOB UNIQUE, "

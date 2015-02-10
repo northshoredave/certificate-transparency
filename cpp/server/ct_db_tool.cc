@@ -506,7 +506,7 @@ void check_point_loop(DataBattery* db, ConfigData& cnfg) {
   leaves_thread_data ltd(db,&ld,&cnfg);
   CertTables cert_tables(db,"id",NULL,&ld,NULL,&cnfg);
   while (true) {
-    uint num_of_leaves = ltd._ld->get_hash_size(); 
+    uint num_of_leaves = ltd._ld->get_leaves_seq_ids_size(); 
     leaves_helper(&ltd);
     std::ofstream ofs(string(FLAGS_dir_name+leaves_pb).c_str());
     LOG(INFO) << "Write leaves to " << FLAGS_dir_name+leaves_pb;
@@ -514,7 +514,7 @@ void check_point_loop(DataBattery* db, ConfigData& cnfg) {
     ofs.close();
 
     uint num_of_pending = dump_pending(cert_tables,FLAGS_dir_name+pending_pb);
-    if ((num_of_leaves != ltd._ld->get_hash_size()) ||
+    if ((num_of_leaves != ltd._ld->get_leaves_seq_ids_size()) ||
         (num_of_pending != 0)) {
       cp.create_checkpoint();
     } else {

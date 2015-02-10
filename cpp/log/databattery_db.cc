@@ -38,25 +38,25 @@ DataBatteryDB<Logged,LoggedList>::update_from_data_battery(uint tree_size) {
     CHECK_EQ(i,(int)lcpb->sequence_number()) << "Sequence id didn't match tree size " << i << ":" << lcpb->sequence_number();
     string hash = lcpb->Hash();
     Logged result;
-    LookupResult res = LookupByHash(hash,&result);
-    //Check if your already in the local database
-    if (res == Database<Logged>::LOOKUP_OK) {
-      //Yes, check your sequence matches if you have one, otherwise set it
-      if (result.has_sequence_number()) {
-        CHECK_EQ(result.sequence_number(),lcpb->sequence_number());
-      } else {
-        //Should actually never happen
-        AssignSequenceNumber(hash,lcpb->sequence_number());
-      }
-    } else {
-      LOG(INFO) << "UFDB: not in local db, adding and setting seq id " << lcpb->sequence_number();
-      leaf_entry lfe;
-      lfe._hash = lcpb->Hash();
-      lcpb->SerializeForDatabase(&lfe._data);
-      lfe._seqid = lcpb->sequence_number();
-      new_leaves.push_back(lfe);
-    }
+    LookupResult res = LookupByHash(hash,&result,lcpb->sequence_number());
     max_seq_id = lcpb->sequence_number();
+    //Check if your already in the local database with no sequence number
+    if (res == Database<Logged>::LOOKUP_OK) {
+      if (!result.has_sequence_number()) {
+        LOG(INFO) << "Entry already present with no sequence number, assign it " << lcpb->sequence_number();
+        AssignSequenceNumber(hash,lcpb->sequence_number());
+        continue;
+      } else if (result.sequence_number() == lcpb->sequence_number()) {
+        LOG(INFO) << "DWC already have entry " << lcpb->sequence_number(); 
+        continue;
+      }
+    } 
+    LOG(INFO) << "UFDB: not in local db, adding and setting seq id " << lcpb->sequence_number();
+    leaf_entry lfe;
+    lfe._hash = lcpb->Hash();
+    lcpb->SerializeForDatabase(&lfe._data);
+    lfe._seqid = lcpb->sequence_number();
+    new_leaves.push_back(lfe);
   }
   //You can release the lock here because we're done with gathering up the new leaves
   pthread_mutex_unlock(&ld->_mutex);
